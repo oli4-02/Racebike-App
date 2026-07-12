@@ -55,7 +55,7 @@ export default function AddressSearch({
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}
         placeholder={placeholder ?? t("startPlaceholder")}
-        className="w-full rounded-md border border-meewind-border bg-meewind-bg-raised px-3 py-2 text-sm"
+        className="w-full rounded-md border border-meewind-border bg-meewind-bg-raised px-3 py-2 text-sm text-meewind-fg placeholder:text-meewind-fg-muted"
       />
       {loading && (
         <div className="absolute right-2 top-9 text-xs text-meewind-fg-muted">…</div>

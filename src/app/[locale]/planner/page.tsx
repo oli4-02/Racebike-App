@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import AddressSearch from "@/components/AddressSearch";
+import LocaleSwitcher from "@/components/LocaleSwitcher";
 import OneWayTargetPicker, { type OneWaySubMode } from "@/components/OneWayTargetPicker";
 import PlannerForm, { type AppMode } from "@/components/PlannerForm";
 import RouteSummary from "@/components/RouteSummary";
@@ -169,9 +170,12 @@ export default function PlannerPage() {
     <div className="flex flex-col md:flex-row flex-1 min-h-0">
       <aside className="order-2 md:order-1 flex flex-col gap-4 overflow-y-auto p-4 md:w-96 md:h-screen border-t md:border-t-0 md:border-r border-meewind-border">
         <div>
-          <Link href="/" className="text-xs text-meewind-accent hover:underline">
-            {t("backToLanding")}
-          </Link>
+          <div className="flex items-center justify-between">
+            <Link href="/" className="text-xs text-meewind-accent hover:underline">
+              {t("backToLanding")}
+            </Link>
+            <LocaleSwitcher />
+          </div>
           <h1 className="meewind-display text-lg mt-1">{t("header.title")}</h1>
           <p className="text-xs text-meewind-fg-muted">{t("header.subtitle")}</p>
         </div>

@@ -1,4 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import LocaleSwitcher from "@/components/LocaleSwitcher";
 import PlaceholderPhoto from "@/components/PlaceholderPhoto";
 import { Link } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
@@ -49,12 +50,15 @@ export default async function LandingPage({
               {tNav("linkFeatures")}
             </a>
           </div>
-          <Link
-            href="/planner"
-            className="meewind-clip bg-meewind-accent px-5 py-2 text-sm font-semibold text-meewind-accent-fg"
-          >
-            {tNav("cta")}
-          </Link>
+          <div className="flex items-center gap-4">
+            <LocaleSwitcher />
+            <Link
+              href="/planner"
+              className="meewind-clip bg-meewind-accent px-5 py-2 text-sm font-semibold text-meewind-accent-fg"
+            >
+              {tNav("cta")}
+            </Link>
+          </div>
         </nav>
       </header>
 

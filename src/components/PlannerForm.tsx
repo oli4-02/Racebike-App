@@ -123,7 +123,7 @@ export default function PlannerForm(props: {
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="w-full rounded-md border border-meewind-border bg-meewind-bg-raised px-3 py-2 text-sm"
+          className="w-full rounded-md border border-meewind-border bg-meewind-bg-raised px-3 py-2 text-sm text-meewind-fg [color-scheme:dark]"
         />
       </div>
 
