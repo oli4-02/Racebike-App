@@ -1,3 +1,5 @@
+import type { AppLocale } from "@/i18n/routing";
+import { SIGNATURE_ROUTE_DESCRIPTIONS } from "./curatedTranslations";
 import type { SignatureRoute } from "./types";
 
 /**
@@ -225,3 +227,11 @@ export const SIGNATURE_ROUTES: SignatureRoute[] = [
     center: { lat: 52.004, lon: 6.033 },
   },
 ];
+
+/** Returns SIGNATURE_ROUTES with `description` swapped to the requested locale (falls back to the German source text if a translation is missing). */
+export function signatureRoutesForLocale(locale: AppLocale): SignatureRoute[] {
+  return SIGNATURE_ROUTES.map((r) => ({
+    ...r,
+    description: SIGNATURE_ROUTE_DESCRIPTIONS[r.id]?.[locale] ?? r.description,
+  }));
+}

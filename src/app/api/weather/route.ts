@@ -1,4 +1,6 @@
+import { getTranslations } from "next-intl/server";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveLocale } from "@/lib/resolveLocale";
 import {
   fetchWindForecast,
   isWithinForecastRange,
@@ -7,13 +9,16 @@ import {
 
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
+  const locale = resolveLocale(params.get("locale"));
+  const t = await getTranslations({ locale, namespace: "api" });
+
   const lat = Number(params.get("lat"));
   const lon = Number(params.get("lon"));
   const date = params.get("date");
 
   if (Number.isNaN(lat) || Number.isNaN(lon) || !date) {
     return NextResponse.json(
-      { error: "lat, lon und date erforderlich." },
+      { error: t("latLonDateRequired") },
       { status: 400 }
     );
   }
@@ -21,7 +26,7 @@ export async function GET(req: NextRequest) {
   if (!isWithinForecastRange(date)) {
     return NextResponse.json({
       available: false,
-      message: "Wind-Prognose ist nur bis ca. 15 Tage im Voraus verfügbar.",
+      message: t("windForecastLimited"),
     });
   }
 
@@ -30,7 +35,7 @@ export async function GET(req: NextRequest) {
     if (forecast.length === 0) {
       return NextResponse.json({
         available: false,
-        message: "Keine Wetterdaten für dieses Datum gefunden.",
+        message: t("noWeatherData"),
       });
     }
     const wind = representativeDaytimeWind(forecast);
@@ -38,7 +43,7 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error(err);
     return NextResponse.json(
-      { error: "Wetterabfrage fehlgeschlagen." },
+      { error: t("weatherQueryFailed") },
       { status: 502 }
     );
   }

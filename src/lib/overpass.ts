@@ -1,3 +1,5 @@
+import type { AppLocale } from "@/i18n/routing";
+import { OVERPASS_STRINGS, POI_CATEGORY_LABELS } from "./i18nStrings";
 import type { Knooppunt, LatLon, POI, POICategory } from "./types";
 
 const OVERPASS_ENDPOINTS = [
@@ -60,23 +62,18 @@ function retryDelayMs(res: Response): number {
 }
 
 /** Overpass error pages are full HTML documents; showing that raw is just noise for users. */
-function summarizeErrorBody(status: number, statusText: string, body: string): string {
+function summarizeErrorBody(status: number, statusText: string, body: string, locale: AppLocale): string {
   const looksLikeHtml = body.trimStart().startsWith("<");
   if (!looksLikeHtml) {
     const snippet = body.trim().slice(0, 300);
     return snippet ? `HTTP ${status} ${statusText}: ${snippet}` : `HTTP ${status} ${statusText}`;
   }
 
-  const reasons: Record<number, string> = {
-    429: "Rate-Limit erreicht (zu viele Anfragen)",
-    502: "Bad Gateway",
-    503: "Dienst überlastet",
-    504: "Gateway Timeout — Anfrage war dem Server zu komplex oder er ist überlastet",
-  };
+  const reasons = OVERPASS_STRINGS[locale].reasons;
   return `HTTP ${status} ${statusText}${reasons[status] ? ` (${reasons[status]})` : ""}`;
 }
 
-async function runOverpassQuery(query: string): Promise<OverpassResponse> {
+async function runOverpassQuery(query: string, locale: AppLocale = "de"): Promise<OverpassResponse> {
   const attempts: string[] = [];
   let sawOverloadSignal = false;
 
@@ -92,7 +89,7 @@ async function runOverpassQuery(query: string): Promise<OverpassResponse> {
         if (!res.ok) {
           sawOverloadSignal = true;
           const bodyText = await res.text().catch(() => "");
-          attempts.push(`${endpoint} -> ${summarizeErrorBody(res.status, res.statusText, bodyText)}`);
+          attempts.push(`${endpoint} -> ${summarizeErrorBody(res.status, res.statusText, bodyText, locale)}`);
 
           if (res.status === RETRY_STATUS && attempt < MAX_ATTEMPTS_PER_ENDPOINT) {
             await sleep(retryDelayMs(res));
@@ -110,24 +107,22 @@ async function runOverpassQuery(query: string): Promise<OverpassResponse> {
     }
   }
 
-  const hint = sawOverloadSignal
-    ? "\n\nDer öffentliche Overpass-Dienst ist gerade überlastet oder limitiert Anfragen. Bitte in ein paar Sekunden erneut versuchen."
-    : "";
-  throw new Error(
-    `Overpass-Anfrage an allen Servern fehlgeschlagen:\n${attempts.join("\n")}${hint}`
-  );
+  const strings = OVERPASS_STRINGS[locale];
+  const hint = sawOverloadSignal ? strings.overloadHint : "";
+  throw new Error(`${strings.allServersFailed}\n${attempts.join("\n")}${hint}`);
 }
 
 /** Fetches Dutch cycle node-network points (rcn_ref) within radiusM of center. */
 export async function fetchKnooppunten(
   center: LatLon,
-  radiusM: number
+  radiusM: number,
+  locale: AppLocale = "de"
 ): Promise<Knooppunt[]> {
   const query = `[out:json][timeout:25];
 node["rcn_ref"](around:${radiusM},${center.lat},${center.lon});
 out body;`;
 
-  const data = await runOverpassQuery(query);
+  const data = await runOverpassQuery(query, locale);
   const elements = data.elements ?? [];
   return elements
     .filter((el) => el.type === "node" && el.tags?.rcn_ref)
@@ -151,7 +146,8 @@ export async function fetchPOIsNearRoute(
   route: LatLon[],
   categories: POICategory[],
   corridorM = 400,
-  maxPoints = 120
+  maxPoints = 120,
+  locale: AppLocale = "de"
 ): Promise<POI[]> {
   if (route.length === 0) return [];
 
@@ -170,7 +166,7 @@ ${clauses}
 );
 out body;`;
 
-  const data = await runOverpassQuery(query);
+  const data = await runOverpassQuery(query, locale);
   const elements = data.elements ?? [];
 
   return elements
@@ -178,7 +174,7 @@ out body;`;
     .map((el): POI => ({
       id: el.id,
       category: categorize(el.tags ?? {}),
-      name: el.tags?.name ?? categoryLabel(categorize(el.tags ?? {})),
+      name: el.tags?.name ?? categoryLabel(categorize(el.tags ?? {}), locale),
       lat: el.lat!,
       lon: el.lon!,
     }));
@@ -208,7 +204,8 @@ export type AreaFeatures = {
 export async function fetchAreaFeatures(
   center: LatLon,
   radiusM: number,
-  includeAttractions = false
+  includeAttractions = false,
+  locale: AppLocale = "de"
 ): Promise<AreaFeatures> {
   const around = `around:${radiusM},${center.lat},${center.lon}`;
   const attractionClauses = includeAttractions
@@ -232,7 +229,7 @@ export async function fetchAreaFeatures(
 );
 out center;`;
 
-  const data = await runOverpassQuery(query);
+  const data = await runOverpassQuery(query, locale);
   const elements = data.elements ?? [];
 
   const features: AreaFeatures = {
@@ -283,7 +280,8 @@ function bucketAreaFeature(
  */
 export async function fetchTourismHistoricPoints(
   centers: LatLon[],
-  radiusM: number
+  radiusM: number,
+  locale: AppLocale = "de"
 ): Promise<LatLon[]> {
   if (centers.length === 0) return [];
 
@@ -303,7 +301,7 @@ ${clauses.map((c) => "  " + c).join("\n")}
 );
 out center;`;
 
-  const data = await runOverpassQuery(query);
+  const data = await runOverpassQuery(query, locale);
   const elements = data.elements ?? [];
   return elements
     .map((el) => elementPoint(el))
@@ -319,13 +317,14 @@ export type TownCandidate = {
 /** Fetches place=city/town/village points within radiusM of center, for one-way destination suggestions. */
 export async function fetchTowns(
   center: LatLon,
-  radiusM: number
+  radiusM: number,
+  locale: AppLocale = "de"
 ): Promise<TownCandidate[]> {
   const query = `[out:json][timeout:25];
 node["place"~"^(city|town|village)$"](around:${radiusM},${center.lat},${center.lon});
 out center;`;
 
-  const data = await runOverpassQuery(query);
+  const data = await runOverpassQuery(query, locale);
   const elements = data.elements ?? [];
 
   return elements
@@ -345,15 +344,6 @@ function categorize(tags: Record<string, string>): POICategory {
   return "cafe";
 }
 
-function categoryLabel(cat: POICategory): string {
-  switch (cat) {
-    case "fuel":
-      return "Tankstelle";
-    case "supermarket":
-      return "Supermarkt";
-    case "ice_cream":
-      return "Eisdiele";
-    case "cafe":
-      return "Café";
-  }
+function categoryLabel(cat: POICategory, locale: AppLocale): string {
+  return POI_CATEGORY_LABELS[locale][cat];
 }

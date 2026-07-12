@@ -1,8 +1,13 @@
-# Rennrad-Routenplaner NL
+# Meewind
 
-Persönlicher Rennrad-Routenplaner für Touren in den Niederlanden. Modul 1
-des größeren Projekts "Sport-App" (Routenplanung → später Garmin/Strava-Export
-und Trainingsdaten-Auswertung).
+Windoptimierter Rennrad-Routenplaner für Touren in den Niederlanden
+(Domain: meewind.cc). Modul 1 des größeren Projekts "Sport-App"
+(Routenplanung → später Garmin/Strava-Export und Trainingsdaten-Auswertung).
+
+Kernversprechen: mit dem Wind fahren, nicht dagegen. Windoptimierung ist das
+Herzstück (siehe Landingpage-Sektion "wind"), Knotenpunkt-Routen,
+Zielvorschläge, Signature-Routen und GPX-Export sind die vier Werkzeuge
+darum herum.
 
 ## Features
 
@@ -52,8 +57,79 @@ und Trainingsdaten-Auswertung).
 
 ## Architektur
 
-Next.js (App Router) mit serverseitigen API-Routes unter `src/app/api/*`, die
-als Proxy zu den externen Diensten dienen (nötig um Nominatim/NS-Header bzw.
+Routing: `src/app/[locale]/` trägt alle Seiten (next-intl-Locale-Präfix),
+`src/app/api/*` bleibt außerhalb von `[locale]` (Route Handlers, kein
+Locale-Präfix in der URL — die aufrufende Seite schickt `locale` explizit als
+Body-Feld/Query-Param mit, siehe "Mehrsprachigkeit" unten).
+
+- `src/app/[locale]/page.tsx` – Meewind-Landingpage (Design "Deichgrün":
+  dunkelgrüner Hintergrund, Archivo/IBM Plex Sans, Limonengrün-Akzent,
+  schräge Clip-Path-Elemente), mit Hero, eigenständiger Wind-Sektion, 01–04
+  Feature-Grid (Knotenpunkt-Routen / Zielvorschläge / Signature-Routen /
+  GPX-Export) und Signup-CTA zum Planer
+- `src/app/[locale]/planner/page.tsx` – der eigentliche Routenplaner (vormals
+  `src/app/page.tsx`)
+- `src/proxy.ts` – next-intl-Locale-Routing. Next.js 16 hat die
+  `middleware.ts`-Datei-Konvention in `proxy.ts` umbenannt (`middleware` /
+  `proxy`-Funktion); next-intls `createMiddleware()`-Factory funktioniert
+  unter dem neuen Namen unverändert weiter.
+
+### Design-Tokens ("Deichgrün")
+
+Farben/Typografie liegen als CSS-Variablen in `src/app/globals.css`
+(Tailwind-v4-`@theme`-Block: `--color-meewind-bg`, `--color-meewind-accent`,
+etc., als `oklch()`-Werte direkt aus der Design-Vorlage übernommen, nicht
+nach Hex konvertiert) statt als Inline-Styles — sowohl Landingpage als auch
+Planer nutzen dieselben Klassen (`bg-meewind-bg`, `text-meewind-accent`,
+`.meewind-display`, `.meewind-clip`, …) für einen einheitlichen Look.
+Schriften (Archivo, IBM Plex Sans) werden über `next/font/google` in
+`src/app/[locale]/layout.tsx` geladen.
+
+### Mehrsprachigkeit (DE/EN/NL)
+
+[next-intl](https://next-intl.dev) mit Locale-Routing (`de` als Default ohne
+Präfix, `/en`, `/nl`); Konfiguration in `src/i18n/routing.ts` /
+`src/i18n/request.ts`, Übersetzungen in `messages/{de,en,nl}.json`
+(Namespaces: `meta`, `nav`, `landing`, `planner`, `api`).
+
+Dynamisch generierte Inhalte laufen außerhalb der React-Baumstruktur (API
+Route Handlers, `src/lib/*.ts`) und können next-intls React-Hooks daher nicht
+direkt nutzen:
+
+- **API-Fehlermeldungen** (Validierung/Catch-all in `src/app/api/*/route.ts`):
+  `getTranslations({ locale, namespace: "api" })` aus `next-intl/server`,
+  Locale kommt explizit aus `body.locale` (POST) bzw. `?locale=` (GET) —
+  aufgelöst über `src/lib/resolveLocale.ts`.
+- **Windbegründung, POI-Kategorien, Routenplaner-/OSRM-/NS-Fehlertexte**:
+  `src/lib/i18nStrings.ts` bündelt Locale-Dictionaries für alles, was tief in
+  `wind.ts`/`overpass.ts`/`osrm.ts`/`ns.ts`/`routePlanner.ts` erzeugt wird;
+  jede betroffene Funktion nimmt zusätzlich einen `locale`-Parameter
+  (Default `"de"`) entgegen, der von der aufrufenden API-Route durchgereicht
+  wird.
+- **Kuratierte Beschreibungen** (Signature-Routen, Landschafts-Korridore):
+  `src/lib/curatedTranslations.ts` hält EN/NL-Übersetzungen der
+  Originalbeschreibungen aus `signatureRoutes.ts`/`scenicCorridors.ts`
+  (Deutsch bleibt Quellsprache); `signatureRoutesForLocale()` /
+  `scenicCorridorsForLocale()` liefern die Liste mit lokalisiertem
+  `description`-Feld an die jeweilige API-Route.
+
+Der Client schickt seine aktuelle Locale (`useLocale()` aus `next-intl`) bei
+jedem `apiClient.ts`-Aufruf mit, damit Server-Antworten (Fehlermeldungen,
+Windbegründung, kuratierte Listen) zur UI-Sprache passen.
+
+### Fotos auf der Landingpage
+
+Die "FOTO —"-Platzhalter der Design-Vorlage sind durch royalty-free
+Unsplash-Bilder ersetzt (`src/components/PlaceholderPhoto.tsx`), passend zu
+NL-Rennrad-/Deich-/Küsten-Motiven über Unsplashs Keyword-Redirect-Endpunkt
+(keine feste Foto-ID hinterlegt). Lädt ein Bild nicht, blendet ein
+`onError`-Handler es geräuschlos aus und der Deichgrün-Akzent-Hintergrund
+bleibt sichtbar. Eigene Fotos lassen sich 1:1 einsetzen, indem einfach der
+`src`-Prop pro `<PlaceholderPhoto>`-Aufruf in `src/app/[locale]/page.tsx`
+ersetzt wird.
+
+Server-Routen unter `src/app/api/*` (Route Handlers, kein `[locale]`-Präfix)
+dienen als Proxy zu den externen Diensten (nötig um Nominatim/NS-Header bzw.
 API-Keys nicht im Browser offenzulegen):
 
 | Route | Zweck | Externer Dienst |
@@ -240,7 +316,10 @@ npm install
 npm run dev
 ```
 
-Öffne [http://localhost:3000](http://localhost:3000).
+Öffne [http://localhost:3000](http://localhost:3000) für die Landingpage,
+[http://localhost:3000/planner](http://localhost:3000/planner) für den
+Planer direkt. Sprache wechseln über `/en`/`/nl`-Präfix (z. B.
+`/en/planner`) — Deutsch ist Standard ohne Präfix.
 
 ### Umgebungsvariablen
 

@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import AddressSearch from "@/components/AddressSearch";
 import OneWayTargetPicker, { type OneWaySubMode } from "@/components/OneWayTargetPicker";
@@ -8,8 +9,9 @@ import PlannerForm, { type AppMode } from "@/components/PlannerForm";
 import RouteSummary from "@/components/RouteSummary";
 import SignatureRoutePicker from "@/components/SignatureRoutePicker";
 import TrainReturnPanel from "@/components/TrainReturnPanel";
+import { Link } from "@/i18n/navigation";
 import { fetchPois, planRoute } from "@/lib/apiClient";
-import { LANDSCAPE_EMOJI, LANDSCAPE_LABELS } from "@/lib/scenicCorridors";
+import { LANDSCAPE_EMOJI, useLandscapeLabels } from "@/lib/scenicCorridors";
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type {
   LatLon,
@@ -25,8 +27,8 @@ import type {
 const RouteMap = dynamic(() => import("@/components/RouteMap"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full w-full items-center justify-center text-sm text-zinc-500">
-      Karte wird geladen…
+    <div className="flex h-full w-full items-center justify-center text-sm text-meewind-fg-muted">
+      …
     </div>
   ),
 });
@@ -35,7 +37,12 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function Home() {
+export default function PlannerPage() {
+  const t = useTranslations("planner");
+  const tMap = useTranslations("planner.map");
+  const landscapeLabels = useLandscapeLabels();
+  const locale = useLocale();
+
   const [start, setStart] = useState<LatLon | null>(null);
   const [appMode, setAppMode] = useState<AppMode>("roundtrip");
   const [distanceKm, setDistanceKm] = useState(60);
@@ -65,15 +72,15 @@ export default function Home() {
   const canSubmit =
     appMode !== "signature" && Boolean(start) && (mode === "roundtrip" || Boolean(destination));
   const submitHint = !start
-    ? "Startpunkt per Adresssuche oder Klick auf die Karte wählen."
+    ? t("form.submitHintNoStart")
     : mode === "oneway" && !destination
-      ? "Bitte zuerst ein Ziel wählen (Adresse eingeben oder Vorschlag auswählen)."
+      ? t("form.submitHintNoDestination")
       : null;
 
   async function loadPois(geometry: LatLon[]) {
     if (poiCategories.length === 0) return;
     try {
-      const p = await fetchPois(geometry, poiCategories);
+      const p = await fetchPois(geometry, poiCategories, locale);
       setPois(p);
     } catch {
       // POIs are a nice-to-have; a failed lookup shouldn't block the route.
@@ -86,18 +93,21 @@ export default function Home() {
     setError(null);
     setPois([]);
     try {
-      const planned = await planRoute({
-        start,
-        mode,
-        distanceKm,
-        date,
-        priorities,
-        destination: mode === "oneway" ? destination! : undefined,
-      });
+      const planned = await planRoute(
+        {
+          start,
+          mode,
+          distanceKm,
+          date,
+          priorities,
+          destination: mode === "oneway" ? destination! : undefined,
+        },
+        locale
+      );
       setRoute(planned);
       await loadPois(planned.geometry);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Routenplanung fehlgeschlagen.");
+      setError(e instanceof Error ? e.message : t("home.routeError"));
       setRoute(null);
     } finally {
       setLoading(false);
@@ -157,13 +167,13 @@ export default function Home() {
 
   return (
     <div className="flex flex-col md:flex-row flex-1 min-h-0">
-      <aside className="order-2 md:order-1 flex flex-col gap-4 overflow-y-auto p-4 md:w-96 md:h-screen border-t md:border-t-0 md:border-r border-zinc-200 dark:border-zinc-800">
+      <aside className="order-2 md:order-1 flex flex-col gap-4 overflow-y-auto p-4 md:w-96 md:h-screen border-t md:border-t-0 md:border-r border-meewind-border">
         <div>
-          <h1 className="text-lg font-semibold">Rennrad-Routenplaner NL</h1>
-          <p className="text-xs text-zinc-500">
-            Startpunkt wählen, Distanz einstellen, Route entlang des
-            Fietsknooppuntennetzes planen.
-          </p>
+          <Link href="/" className="text-xs text-meewind-accent hover:underline">
+            {t("backToLanding")}
+          </Link>
+          <h1 className="meewind-display text-lg mt-1">{t("header.title")}</h1>
+          <p className="text-xs text-meewind-fg-muted">{t("header.subtitle")}</p>
         </div>
 
         <AddressSearch onSelect={handleSetStart} />
@@ -216,42 +226,42 @@ export default function Home() {
         />
 
         {error && (
-          <div className="rounded-md bg-red-50 dark:bg-red-950 p-2 text-xs text-red-700 dark:text-red-300 whitespace-pre-wrap break-words">
+          <div className="rounded-md bg-red-950/40 p-2 text-xs text-red-300 whitespace-pre-wrap break-words">
             {error}
           </div>
         )}
 
         {scenicPlan && (
-          <div className="rounded-md border border-zinc-300 dark:border-zinc-700 p-3 text-sm">
+          <div className="rounded-md border border-meewind-border p-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="font-medium">{scenicPlan.corridor.name}</span>
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-meewind-fg-muted">
                 {LANDSCAPE_EMOJI[scenicPlan.corridor.landscapeType]}{" "}
-                {LANDSCAPE_LABELS[scenicPlan.corridor.landscapeType]}
+                {landscapeLabels[scenicPlan.corridor.landscapeType]}
               </span>
             </div>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+            <p className="text-xs text-meewind-fg-muted mt-1">
               {scenicPlan.corridor.description}
             </p>
           </div>
         )}
 
         {signaturePlan && (
-          <div className="rounded-md border border-zinc-300 dark:border-zinc-700 p-3 text-sm">
+          <div className="rounded-md border border-meewind-border p-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="font-medium">{signaturePlan.signatureRoute.name}</span>
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-meewind-fg-muted">
                 {LANDSCAPE_EMOJI[signaturePlan.signatureRoute.landscapeType]}{" "}
-                {LANDSCAPE_LABELS[signaturePlan.signatureRoute.landscapeType]}
+                {landscapeLabels[signaturePlan.signatureRoute.landscapeType]}
               </span>
             </div>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+            <p className="text-xs text-meewind-fg-muted mt-1">
               {signaturePlan.signatureRoute.description}
             </p>
-            <p className="text-xs text-zinc-500 mt-1">
+            <p className="text-xs text-meewind-fg-muted mt-1">
               {signaturePlan.usedStation
-                ? `Start liegt weit entfernt — Anreise per Zug nach ${signaturePlan.station?.name}.`
-                : "Start liegt in der Nähe — direkt von Zuhause losfahren."}
+                ? t("home.signatureStationHint", { station: signaturePlan.station?.name ?? "" })
+                : t("home.signatureDirectHint")}
             </p>
           </div>
         )}
@@ -264,14 +274,14 @@ export default function Home() {
               home={start ?? scenicPlan.entryStation}
               dest={scenicPlan.entryStation}
               date={date}
-              title="Hinfahrt (Zuhause → Einstieg)"
+              title={t("home.scenicOutboundTitle")}
               preloaded={scenicPlan.outboundTrain}
             />
             <TrainReturnPanel
               home={start ?? scenicPlan.entryStation}
               dest={scenicPlan.exitStation}
               date={date}
-              title="Rückfahrt (Ausstieg → Zuhause)"
+              title={t("home.scenicReturnTitle")}
               preloaded={scenicPlan.returnTrain}
             />
           </>
@@ -283,14 +293,14 @@ export default function Home() {
               home={start ?? signaturePlan.station}
               dest={signaturePlan.station}
               date={date}
-              title="Hinfahrt (Zuhause → Start der Route)"
+              title={t("home.signatureOutboundTitle")}
               preloaded={signaturePlan.outboundTrain}
             />
             <TrainReturnPanel
               home={start ?? signaturePlan.station}
               dest={signaturePlan.station}
               date={date}
-              title="Rückfahrt (Ende der Route → Zuhause)"
+              title={t("home.signatureReturnTitle")}
               preloaded={signaturePlan.returnTrain ?? undefined}
             />
           </>
@@ -310,6 +320,11 @@ export default function Home() {
           wind={route?.windInfo ?? null}
           destination={mapDestination}
           homeMarker={mapHomeMarker}
+          labels={{
+            start: tMap("start"),
+            home: tMap("home"),
+            destination: tMap("destination"),
+          }}
         />
       </main>
     </div>

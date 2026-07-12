@@ -1,8 +1,10 @@
+import { getTranslations } from "next-intl/server";
 import { NextRequest, NextResponse } from "next/server";
-import { SCENIC_CORRIDORS } from "@/lib/scenicCorridors";
+import { scenicCorridorsForLocale } from "@/lib/scenicCorridors";
 import { fetchAreaFeatures, fetchTowns, type AreaFeatures } from "@/lib/overpass";
 import { planRoute } from "@/lib/routePlanner";
 import { buildTrainInfo, findNearestStation, isNsConfigured } from "@/lib/ns";
+import { resolveLocale } from "@/lib/resolveLocale";
 import { bearing, distance } from "@/lib/geo";
 import {
   fetchWindForecast,
@@ -20,22 +22,29 @@ export async function POST(req: NextRequest) {
     distanceKm: number;
     date: string;
     priorities?: Priorities;
+    locale?: string;
   };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Ungültiger Request-Body." }, { status: 400 });
+    const locale = resolveLocale(req.nextUrl.searchParams.get("locale"));
+    const t = await getTranslations({ locale, namespace: "api" });
+    return NextResponse.json({ error: t("invalidBody") }, { status: 400 });
   }
+
+  const locale = resolveLocale(body.locale);
+  const t = await getTranslations({ locale, namespace: "api" });
+
   if (!body?.corridorId || !body?.start || !body?.distanceKm || !body?.date) {
     return NextResponse.json(
-      { error: "corridorId, start, distanceKm und date erforderlich." },
+      { error: t("corridorFieldsRequired") },
       { status: 400 }
     );
   }
 
-  const corridor = SCENIC_CORRIDORS.find((c) => c.id === body.corridorId);
+  const corridor = scenicCorridorsForLocale(locale).find((c) => c.id === body.corridorId);
   if (!corridor) {
-    return NextResponse.json({ error: "Unbekannter Korridor." }, { status: 404 });
+    return NextResponse.json({ error: t("unknownCorridor") }, { status: 404 });
   }
 
   const priorities: Priorities = { ...DEFAULT_PRIORITIES, ...body.priorities };
@@ -45,15 +54,19 @@ export async function POST(req: NextRequest) {
 
   try {
     const [entryStationRaw, homeStationRaw, windInfo, towns, areaFeatures] = await Promise.all([
-      nsConfigured ? findNearestStation(corridor.center).catch(() => null) : Promise.resolve(null),
-      nsConfigured ? findNearestStation(body.start).catch(() => null) : Promise.resolve(null),
+      nsConfigured
+        ? findNearestStation(corridor.center, locale).catch(() => null)
+        : Promise.resolve(null),
+      nsConfigured
+        ? findNearestStation(body.start, locale).catch(() => null)
+        : Promise.resolve(null),
       isWithinForecastRange(body.date)
         ? fetchWindForecast(corridor.center, body.date)
             .then((f) => (f.length > 0 ? representativeDaytimeWind(f) : null))
             .catch(() => null)
         : Promise.resolve(null),
-      fetchTowns(corridor.center, searchRadiusM),
-      fetchAreaFeatures(corridor.center, searchRadiusM),
+      fetchTowns(corridor.center, searchRadiusM, locale),
+      fetchAreaFeatures(corridor.center, searchRadiusM, false, locale),
     ]);
 
     const entryPoint: LatLon = entryStationRaw ?? corridor.center;
@@ -79,13 +92,7 @@ export async function POST(req: NextRequest) {
       windInfo
     );
     if (!exitTown) {
-      return NextResponse.json(
-        {
-          error:
-            "Kein geeigneter Zielort innerhalb des Korridors gefunden. Bitte einen anderen Korridor oder eine andere Distanz wählen.",
-        },
-        { status: 502 }
-      );
+      return NextResponse.json({ error: t("noExitTownFound") }, { status: 502 });
     }
 
     const route = await planRoute({
@@ -95,11 +102,12 @@ export async function POST(req: NextRequest) {
       date: body.date,
       priorities,
       destination: exitTown,
+      locale,
     });
     if (windInfo) route.windInfo = windInfo;
 
     const exitStationRaw = nsConfigured
-      ? await findNearestStation(exitTown).catch(() => null)
+      ? await findNearestStation(exitTown, locale).catch(() => null)
       : null;
     const exitStation: StationInfo = exitStationRaw ?? {
       name: exitTown.name,
@@ -108,8 +116,8 @@ export async function POST(req: NextRequest) {
     };
 
     const [outboundTrain, returnTrain] = await Promise.all([
-      buildTrainInfo(homeStation, entryStation, `${body.date}T08:30:00`, nsConfigured),
-      buildTrainInfo(exitStation, homeStation, `${body.date}T16:00:00`, nsConfigured),
+      buildTrainInfo(homeStation, entryStation, `${body.date}T08:30:00`, nsConfigured, locale),
+      buildTrainInfo(exitStation, homeStation, `${body.date}T16:00:00`, nsConfigured, locale),
     ]);
 
     return NextResponse.json({
@@ -124,8 +132,7 @@ export async function POST(req: NextRequest) {
     console.error(err);
     return NextResponse.json(
       {
-        error:
-          err instanceof Error ? err.message : "Landschafts-Route fehlgeschlagen.",
+        error: err instanceof Error ? err.message : t("scenicRouteFailed"),
       },
       { status: 502 }
     );

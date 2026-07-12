@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import AddressSearch from "./AddressSearch";
 import DestinationSuggestions from "./DestinationSuggestions";
@@ -30,6 +31,8 @@ export default function OneWayTargetPicker({
   onScenicRoute: (result: ScenicRoutePlan) => void;
   onSubModeChange?: (m: OneWaySubMode) => void;
 }) {
+  const t = useTranslations("planner.oneWay");
+  const locale = useLocale();
   const [subMode, setSubMode] = useState<OneWaySubMode>("address");
   const [suggestions, setSuggestions] = useState<DestinationSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -50,12 +53,11 @@ export default function OneWayTargetPicker({
         distanceKm,
         date,
         priorities,
+        locale,
       });
       setSuggestions(s);
     } catch (e) {
-      setSuggestError(
-        e instanceof Error ? e.message : "Fehler beim Laden der Vorschläge."
-      );
+      setSuggestError(e instanceof Error ? e.message : t("suggestError"));
     } finally {
       setLoadingSuggestions(false);
     }
@@ -66,34 +68,32 @@ export default function OneWayTargetPicker({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-zinc-300 dark:border-zinc-700 p-3">
-      <div className="flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-700 text-xs">
+    <div className="flex flex-col gap-3 rounded-md border border-meewind-border p-3">
+      <div className="flex rounded-md overflow-hidden border border-meewind-border text-xs">
         <button
           type="button"
-          className={`flex-1 px-2 py-1.5 ${subMode === "address" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
+          className={`flex-1 px-2 py-1.5 ${subMode === "address" ? "bg-meewind-accent text-meewind-accent-fg" : "bg-meewind-bg-raised"}`}
           onClick={() => selectSubMode("address")}
         >
-          Ziel eingeben
+          {t("tabAddress")}
         </button>
         <button
           type="button"
-          className={`flex-1 px-2 py-1.5 ${subMode === "suggestions" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
+          className={`flex-1 px-2 py-1.5 ${subMode === "suggestions" ? "bg-meewind-accent text-meewind-accent-fg" : "bg-meewind-bg-raised"}`}
           onClick={() => selectSubMode("suggestions")}
         >
-          Ziel offen / Vorschläge
+          {t("tabSuggestions")}
         </button>
         <button
           type="button"
-          className={`flex-1 px-2 py-1.5 ${subMode === "scenic" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
+          className={`flex-1 px-2 py-1.5 ${subMode === "scenic" ? "bg-meewind-accent text-meewind-accent-fg" : "bg-meewind-bg-raised"}`}
           onClick={() => selectSubMode("scenic")}
         >
-          Landschafts-Route
+          {t("tabScenic")}
         </button>
       </div>
 
-      {subMode === "address" && (
-        <AddressSearch onSelect={onSelectDestination} label="Zieladresse" />
-      )}
+      {subMode === "address" && <AddressSearch onSelect={onSelectDestination} />}
 
       {subMode === "suggestions" && (
         <div className="flex flex-col gap-2">
@@ -101,12 +101,12 @@ export default function OneWayTargetPicker({
             type="button"
             onClick={loadSuggestions}
             disabled={loadingSuggestions}
-            className="rounded-md border border-zinc-300 dark:border-zinc-700 py-2 text-xs font-medium disabled:opacity-50"
+            className="rounded-md border border-meewind-border py-2 text-xs font-medium disabled:opacity-50"
           >
-            {loadingSuggestions ? "Suche…" : "Vorschläge für diese Distanz suchen"}
+            {loadingSuggestions ? t("searching") : t("searchButton")}
           </button>
           {suggestError && (
-            <p className="text-xs text-red-600 whitespace-pre-wrap break-words">
+            <p className="text-xs text-red-400 whitespace-pre-wrap break-words">
               {suggestError}
             </p>
           )}
@@ -132,8 +132,10 @@ export default function OneWayTargetPicker({
       )}
 
       {subMode !== "scenic" && destination && (
-        <p className="text-xs text-zinc-500">
-          Ziel: {destinationLabel ?? `${destination.lat.toFixed(4)}, ${destination.lon.toFixed(4)}`}
+        <p className="text-xs text-meewind-fg-muted">
+          {t("destinationLabel", {
+            value: destinationLabel ?? `${destination.lat.toFixed(4)}, ${destination.lon.toFixed(4)}`,
+          })}
         </p>
       )}
     </div>

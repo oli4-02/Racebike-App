@@ -1,10 +1,11 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { fetchSignatureRoutes, planSignatureRoute } from "@/lib/apiClient";
 import { approximateLoopGeometry, distance } from "@/lib/geo";
-import { LANDSCAPE_EMOJI, LANDSCAPE_LABELS } from "@/lib/scenicCorridors";
+import { LANDSCAPE_EMOJI, useLandscapeLabels } from "@/lib/scenicCorridors";
 import type {
   LandscapeType,
   LatLon,
@@ -16,13 +17,12 @@ import type {
 const MiniRouteMap = dynamic(() => import("./MiniRouteMap"), {
   ssr: false,
   loading: () => (
-    <div className="h-28 w-full rounded bg-zinc-100 dark:bg-zinc-800 animate-pulse" />
+    <div className="h-28 w-full rounded bg-meewind-bg-raised animate-pulse" />
   ),
 });
 
-const LANDSCAPE_TYPES = Object.keys(LANDSCAPE_LABELS) as LandscapeType[];
 const DEFAULT_PREVIEW_KM = 50;
-// Mirrors FAR_THRESHOLD_M in /api/signature-route/route.ts, just for the "Zug-Anreise" hint below.
+// Mirrors FAR_THRESHOLD_M in /api/signature-route/route.ts, just for the train-travel hint below.
 const FAR_THRESHOLD_KM = 25;
 
 export default function SignatureRoutePicker({
@@ -40,6 +40,10 @@ export default function SignatureRoutePicker({
   onDistanceKmChange: (km: number) => void;
   onPlanned: (result: SignatureRoutePlan) => void;
 }) {
+  const t = useTranslations("planner.signature");
+  const locale = useLocale();
+  const landscapeLabels = useLandscapeLabels();
+  const landscapeTypes = Object.keys(landscapeLabels) as LandscapeType[];
   const [routes, setRoutes] = useState<SignatureRoute[]>([]);
   const [loadingRoutes, setLoadingRoutes] = useState(true);
   const [filter, setFilter] = useState<LandscapeType | null>(null);
@@ -48,14 +52,14 @@ export default function SignatureRoutePicker({
 
   useEffect(() => {
     let cancelled = false;
-    fetchSignatureRoutes()
+    fetchSignatureRoutes(locale)
       .then((r) => !cancelled && setRoutes(r))
-      .catch(() => !cancelled && setError("Routen-Liste konnte nicht geladen werden."))
+      .catch(() => !cancelled && setError(t("errorLoad")))
       .finally(() => !cancelled && setLoadingRoutes(false));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale, t]);
 
   async function handlePick(route: SignatureRoute) {
     setPlanningId(route.id);
@@ -69,10 +73,11 @@ export default function SignatureRoutePicker({
         distanceKm: usedDistanceKm,
         date,
         priorities,
+        locale,
       });
       onPlanned(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Signature-Route fehlgeschlagen.");
+      setError(e instanceof Error ? e.message : t("errorPlan"));
     } finally {
       setPlanningId(null);
     }
@@ -88,7 +93,7 @@ export default function SignatureRoutePicker({
 
   return (
     <div className="flex flex-col gap-2">
-      {loadingRoutes && <p className="text-xs text-zinc-500">Lade Signature-Routen…</p>}
+      {loadingRoutes && <p className="text-xs text-meewind-fg-muted">{t("loading")}</p>}
 
       {!loadingRoutes && (
         <div className="flex flex-wrap gap-1">
@@ -96,37 +101,37 @@ export default function SignatureRoutePicker({
             type="button"
             className={`rounded-full border px-2 py-0.5 text-xs ${
               filter === null
-                ? "bg-blue-600 text-white border-blue-600"
-                : "border-zinc-300 dark:border-zinc-700"
+                ? "bg-meewind-accent text-meewind-accent-fg border-meewind-accent"
+                : "border-meewind-border"
             }`}
             onClick={() => setFilter(null)}
           >
-            Alle
+            {t("all")}
           </button>
-          {LANDSCAPE_TYPES.map((t) => (
+          {landscapeTypes.map((lt) => (
             <button
-              key={t}
+              key={lt}
               type="button"
               className={`rounded-full border px-2 py-0.5 text-xs ${
-                filter === t
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "border-zinc-300 dark:border-zinc-700"
+                filter === lt
+                  ? "bg-meewind-accent text-meewind-accent-fg border-meewind-accent"
+                  : "border-meewind-border"
               }`}
-              onClick={() => setFilter(t)}
+              onClick={() => setFilter(lt)}
             >
-              {LANDSCAPE_EMOJI[t]} {LANDSCAPE_LABELS[t]}
+              {LANDSCAPE_EMOJI[lt]} {landscapeLabels[lt]}
             </button>
           ))}
         </div>
       )}
 
-      {error && <p className="text-xs text-red-600 whitespace-pre-wrap break-words">{error}</p>}
+      {error && <p className="text-xs text-red-400 whitespace-pre-wrap break-words">{error}</p>}
 
       <div className="flex flex-col gap-2 max-h-96 overflow-y-auto">
         {visible.map((r) => (
           <div
             key={r.id}
-            className="rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden shrink-0"
+            className="rounded-md border border-meewind-border overflow-hidden shrink-0"
           >
             <MiniRouteMap
               start={r.center}
@@ -136,28 +141,26 @@ export default function SignatureRoutePicker({
             <div className="p-2 flex flex-col gap-1">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{r.name}</span>
-                <span className="text-xs text-zinc-500">
-                  {LANDSCAPE_EMOJI[r.landscapeType]} {LANDSCAPE_LABELS[r.landscapeType]}
+                <span className="text-xs text-meewind-fg-muted">
+                  {LANDSCAPE_EMOJI[r.landscapeType]} {landscapeLabels[r.landscapeType]}
                 </span>
               </div>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-meewind-fg-muted">
                 {r.province} · {r.startRegionName} ·{" "}
-                {r.approxDistanceKm ? `≈ ${r.approxDistanceKm} km` : "variable Distanz"}
+                {r.approxDistanceKm ? `≈ ${r.approxDistanceKm} km` : t("variableDistance")}
               </p>
-              <p className="text-xs text-zinc-500">
-                {r.distFromStartKm.toFixed(0)} km von deinem Standort ·{" "}
-                {r.distFromStartKm > FAR_THRESHOLD_KM
-                  ? "Zug-Anreise wird vorgeschlagen"
-                  : "direkt losfahren"}
+              <p className="text-xs text-meewind-fg-muted">
+                {t("distFromStart", { km: r.distFromStartKm.toFixed(0) })} ·{" "}
+                {r.distFromStartKm > FAR_THRESHOLD_KM ? t("trainSuggested") : t("directStart")}
               </p>
-              <p className="text-xs text-zinc-600 dark:text-zinc-400">{r.description}</p>
+              <p className="text-xs text-meewind-fg-muted">{r.description}</p>
               <button
                 type="button"
                 onClick={() => handlePick(r)}
                 disabled={planningId !== null}
-                className="mt-1 rounded-md bg-blue-600 text-white text-xs font-medium py-1.5 disabled:opacity-50"
+                className="mt-1 rounded-md bg-meewind-accent text-meewind-accent-fg text-xs font-medium py-1.5 disabled:opacity-50"
               >
-                {planningId === r.id ? "Route wird geplant…" : "Diese Route planen"}
+                {planningId === r.id ? t("planning") : t("plan")}
               </button>
             </div>
           </div>

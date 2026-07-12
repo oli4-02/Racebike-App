@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server";
-import { SIGNATURE_ROUTES } from "@/lib/signatureRoutes";
+import { NextRequest, NextResponse } from "next/server";
+import { signatureRoutesForLocale } from "@/lib/signatureRoutes";
+import { resolveLocale } from "@/lib/resolveLocale";
 
-export async function GET() {
-  return NextResponse.json({ routes: SIGNATURE_ROUTES });
+export async function GET(req: NextRequest) {
+  const locale = resolveLocale(req.nextUrl.searchParams.get("locale"));
+  return NextResponse.json({ routes: signatureRoutesForLocale(locale) });
 }

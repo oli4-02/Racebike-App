@@ -1,0 +1,198 @@
+{
+  "api": {
+    "invalidBody": "Ungültiger Request-Body.",
+    "invalidRequest": "Ungültige Anfrage.",
+    "onewayDestinationRequired": "Für eine One-Way-Tour wird ein Ziel benötigt.",
+    "routePlanningFailed": "Routenplanung fehlgeschlagen.",
+    "startDistanceRequired": "start und distanceKm erforderlich.",
+    "destinationsFailed": "Zielvorschläge fehlgeschlagen.",
+    "geometryRequired": "geometry erforderlich.",
+    "poiSearchFailed": "POI-Suche fehlgeschlagen.",
+    "corridorFieldsRequired": "corridorId, start, distanceKm und date erforderlich.",
+    "unknownCorridor": "Unbekannter Korridor.",
+    "noExitTownFound": "Kein geeigneter Zielort innerhalb des Korridors gefunden. Bitte einen anderen Korridor oder eine andere Distanz wählen.",
+    "scenicRouteFailed": "Landschafts-Route fehlgeschlagen.",
+    "routeFieldsRequired": "routeId, start, distanceKm und date erforderlich.",
+    "unknownSignatureRoute": "Unbekannte Signature-Route.",
+    "signatureRouteFailed": "Signature-Route fehlgeschlagen.",
+    "searchTermTooShort": "Suchbegriff zu kurz.",
+    "addressSearchFailed": "Adresssuche fehlgeschlagen.",
+    "stationFieldsRequired": "destLat, destLon, homeLat, homeLon erforderlich.",
+    "latLonDateRequired": "lat, lon und date erforderlich.",
+    "windForecastLimited": "Wind-Prognose ist nur bis ca. 15 Tage im Voraus verfügbar.",
+    "noWeatherData": "Keine Wetterdaten für dieses Datum gefunden.",
+    "weatherQueryFailed": "Wetterabfrage fehlgeschlagen."
+  },
+  "meta": {
+    "landingTitle": "Meewind — Rennradfahren mit dem Wind, nicht dagegen",
+    "landingDescription": "Meewind plant windoptimierte Rennradrouten in den Niederlanden: Knotenpunkt-Routen, Zielvorschläge, kuratierte Signature-Routen und GPX-Export für Garmin & Strava.",
+    "plannerTitle": "Planer — Meewind",
+    "plannerDescription": "Startpunkt wählen, Distanz einstellen, windoptimierte Route entlang des niederländischen Fietsknooppuntennetzes planen."
+  },
+  "nav": {
+    "wordmark": "MEEWIND",
+    "linkWind": "Windoptimierung",
+    "linkFeatures": "Features",
+    "cta": "Route planen"
+  },
+  "landing": {
+    "hero": {
+      "kicker": "MIT DEM WIND, NICHT DAGEGEN",
+      "headline": "FAHR MIT DEM WIND. NICHT DAGEGEN.",
+      "sub": "Meewind plant deine Rennradroute in den Niederlanden so, dass der Wind dich schiebt statt bremst — dazu Knotenpunkt-Routen, Zielvorschläge, kuratierte Signature-Routen und GPX-Export für Garmin & Strava.",
+      "ctaPrimary": "Route planen",
+      "ctaSecondary": "So funktioniert's",
+      "photoAlt": "Rennradfahrer auf einem niederländischen Deich mit Windrädern im Hintergrund"
+    },
+    "windMoment": {
+      "kicker": "DAS HERZSTÜCK",
+      "headline": "WINDOPTIMIERT. IMMER.",
+      "body": "Meewind lädt für deinen Fahrtag echte Windvorhersagen und rechnet jede Route in beide Fahrtrichtungen durch. Gewinnt eine Richtung mehr Rückenwind im zweiten, anstrengenderen Streckendrittel, fährst du genau die — automatisch, nicht als Häkchen irgendwo in den Einstellungen.",
+      "example": "Beispiel: Wind aus West, 24 km/h — die Route wird gegen den Uhrzeigersinn gefahren, damit die Rückfahrt Rückenwind bekommt statt Gegenwind.",
+      "photoAlt": "Windgepeitschte Küstenstraße in Zeeland"
+    },
+    "features": {
+      "kicker": "VIER WERKZEUGE, EIN ZIEL",
+      "items": [
+        {
+          "number": "01",
+          "title": "KNOTENPUNKT-ROUTEN",
+          "body": "Rundtouren entlang des niederländischen Fietsknooppuntennetzes — Startpunkt und Distanz wählen, Meewind verbindet die Knotenpunkte zu einer runden Strecke.",
+          "photoAlt": "Fietsknooppunt-Wegweiser an einer Kreuzung"
+        },
+        {
+          "number": "02",
+          "title": "ZIELVORSCHLÄGE",
+          "body": "Kein festes Ziel? Meewind schlägt lohnende Orte in deiner Wunschdistanz vor — mit Vorschau-Route und Rückfahrt-Option per Bahn.",
+          "photoAlt": "Historisches niederländisches Stadtzentrum von oben"
+        },
+        {
+          "number": "03",
+          "title": "SIGNATURE-ROUTEN",
+          "body": "19 kuratierte Strecken quer durchs Land, von der Amstelroute bis zur Amstel Gold Race Loop in Zuid-Limburg — bekannte Touren, neu geplant nach Wind und deinen Prioritäten.",
+          "photoAlt": "Hügelige Rennradstrecke in Zuid-Limburg"
+        },
+        {
+          "number": "04",
+          "title": "GPX-EXPORT",
+          "body": "Jede geplante Route als GPX-Datei für Garmin, Strava und Komoot — inklusive Cafés, Tankstellen und Eisdielen entlang der Strecke.",
+          "photoAlt": "Rennrad-Cockpit mit GPS-Gerät"
+        }
+      ]
+    },
+    "signup": {
+      "headline": "BEREIT FÜR RÜCKENWIND?",
+      "body": "Route planen, Windvorhersage abwarten lassen, losfahren.",
+      "cta": "Jetzt Route planen"
+    },
+    "footer": {
+      "tagline": "Windoptimierte Rennradrouten in den Niederlanden.",
+      "domain": "meewind.cc"
+    }
+  },
+  "planner": {
+    "backToLanding": "← Zur Startseite",
+    "header": {
+      "title": "Meewind Planer",
+      "subtitle": "Startpunkt wählen, Distanz einstellen — Meewind plant die windoptimierte Route entlang des Fietsknooppuntennetzes."
+    },
+    "addressSearch": {
+      "startLabel": "Startadresse",
+      "startPlaceholder": "z.B. Utrecht, Domplein",
+      "destLabel": "Zieladresse"
+    },
+    "oneWay": {
+      "tabAddress": "Ziel eingeben",
+      "tabSuggestions": "Ziel offen / Vorschläge",
+      "tabScenic": "Landschafts-Route",
+      "destinationLabel": "Ziel: {value}",
+      "searchButton": "Vorschläge für diese Distanz suchen",
+      "searching": "Suche…",
+      "suggestError": "Fehler beim Laden der Vorschläge."
+    },
+    "suggestions": {
+      "loading": "Suche Zielvorschläge…",
+      "empty": "Keine Zielvorschläge in dieser Distanz gefunden. Distanz anpassen oder Ziel manuell eingeben.",
+      "planButton": "Diese Route planen"
+    },
+    "form": {
+      "tourType": "Tourtyp",
+      "modeRoundtrip": "Rundtour",
+      "modeOneway": "One-Way + Zug",
+      "modeSignature": "Signature-Route",
+      "distanceRoundtrip": "Distanz",
+      "distanceSignature": "Ziel-Distanz (wird beim Auswählen ggf. angepasst)",
+      "distanceScenic": "Gewünschte Fahrlänge im Korridor",
+      "distanceOneway": "Such-Distanz für Ziel",
+      "date": "Fahrtdatum",
+      "poiTitle": "Points of Interest",
+      "poiFuel": "⛽ Tankstelle",
+      "poiSupermarket": "🛒 Supermarkt",
+      "poiIceCream": "🍦 Eisdiele",
+      "poiCafe": "☕ Café",
+      "hideSubmitSignature": "Oben eine Signature-Route auswählen, um die Route direkt zu planen.",
+      "hideSubmitScenic": "Oben einen Korridor auswählen, um die Route direkt zu planen.",
+      "submit": "Route planen",
+      "submitLoading": "Route wird geplant…",
+      "submitHintNoStart": "Startpunkt per Adresssuche oder Klick auf die Karte wählen.",
+      "submitHintNoDestination": "Bitte zuerst ein Ziel wählen (Adresse eingeben oder Vorschlag auswählen)."
+    },
+    "priorities": {
+      "title": "Prioritäten",
+      "fewTrafficLights": "Wenig Ampeln/Kreuzungen",
+      "nature": "Viel Natur/Wasser",
+      "poiDensity": "Viele Cafés/POIs",
+      "shortestTime": "Kürzeste Zeit",
+      "tailwind": "Maximaler Rückenwind"
+    },
+    "summary": {
+      "distance": "Distanz",
+      "duration": "Fahrzeit (geschätzt)",
+      "knooppunten": "Knotenpunkte",
+      "gpxExport": "GPX exportieren (Garmin / Strava)"
+    },
+    "scenic": {
+      "loading": "Lade Korridore…",
+      "all": "Alle",
+      "errorLoad": "Korridor-Liste konnte nicht geladen werden.",
+      "errorPlan": "Landschafts-Route fehlgeschlagen.",
+      "entry": "Einstieg: {station}",
+      "plan": "Diese Route planen",
+      "planning": "Route wird geplant…"
+    },
+    "signature": {
+      "loading": "Lade Signature-Routen…",
+      "errorLoad": "Routen-Liste konnte nicht geladen werden.",
+      "errorPlan": "Signature-Route fehlgeschlagen.",
+      "distFromStart": "{km} km von deinem Standort",
+      "trainSuggested": "Zug-Anreise wird vorgeschlagen",
+      "directStart": "direkt losfahren",
+      "variableDistance": "variable Distanz",
+      "plan": "Diese Route planen",
+      "planning": "Route wird geplant…",
+      "all": "Alle"
+    },
+    "train": {
+      "defaultTitle": "Zugrückfahrt",
+      "loading": "Lade NS-Verbindungen…",
+      "ovFiets": "OV-fiets verfügbar: {count}",
+      "transfersOne": "{count} Umstieg",
+      "transfersOther": "{count} Umstiege"
+    },
+    "map": {
+      "loading": "Karte wird geladen…",
+      "start": "Start",
+      "home": "Zuhause",
+      "destination": "Ziel"
+    },
+    "home": {
+      "scenicOutboundTitle": "Hinfahrt (Zuhause → Einstieg)",
+      "scenicReturnTitle": "Rückfahrt (Ausstieg → Zuhause)",
+      "signatureOutboundTitle": "Hinfahrt (Zuhause → Start der Route)",
+      "signatureReturnTitle": "Rückfahrt (Ende der Route → Zuhause)",
+      "signatureStationHint": "Start liegt weit entfernt — Anreise per Zug nach {station}.",
+      "signatureDirectHint": "Start liegt in der Nähe — direkt von Zuhause losfahren.",
+      "routeError": "Routenplanung fehlgeschlagen."
+    }
+  }
+}

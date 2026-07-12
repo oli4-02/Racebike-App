@@ -1,3 +1,5 @@
+import type { AppLocale } from "@/i18n/routing";
+import { OSRM_STRINGS } from "./i18nStrings";
 import type { LatLon } from "./types";
 
 // Public OSRM demo instance with a bicycle routing profile.
@@ -21,7 +23,7 @@ export type OsrmLeg = {
 };
 
 /** Routes a single leg between two points, following the paved cycling network. */
-export async function routeLeg(a: LatLon, b: LatLon): Promise<OsrmLeg> {
+export async function routeLeg(a: LatLon, b: LatLon, locale: AppLocale = "de"): Promise<OsrmLeg> {
   const coords = `${a.lon},${a.lat};${b.lon},${b.lat}`;
   const url = `${OSRM_BASE}/${coords}?overview=full&geometries=geojson&steps=false`;
 
@@ -32,14 +34,14 @@ export async function routeLeg(a: LatLon, b: LatLon): Promise<OsrmLeg> {
   if (!res.ok) {
     const bodySnippet = (await res.text().catch(() => "")).slice(0, 300);
     throw new Error(
-      `OSRM antwortete HTTP ${res.status} ${res.statusText}${
+      `${OSRM_STRINGS[locale].httpError(res.status, res.statusText)}${
         bodySnippet ? `: ${bodySnippet}` : ""
       }`
     );
   }
   const data = await res.json();
   if (data.code !== "Ok" || !data.routes?.length) {
-    throw new Error(`OSRM konnte keine Route finden: ${data.code ?? "unknown"}`);
+    throw new Error(OSRM_STRINGS[locale].noRoute(data.code ?? "unknown"));
   }
 
   const route = data.routes[0];
@@ -55,10 +57,10 @@ export async function routeLeg(a: LatLon, b: LatLon): Promise<OsrmLeg> {
 }
 
 /** Routes a full chain of waypoints leg by leg (sequential to stay polite with the free instance). */
-export async function routeChain(points: LatLon[]): Promise<OsrmLeg[]> {
+export async function routeChain(points: LatLon[], locale: AppLocale = "de"): Promise<OsrmLeg[]> {
   const legs: OsrmLeg[] = [];
   for (let i = 1; i < points.length; i++) {
-    legs.push(await routeLeg(points[i - 1], points[i]));
+    legs.push(await routeLeg(points[i - 1], points[i], locale));
   }
   return legs;
 }

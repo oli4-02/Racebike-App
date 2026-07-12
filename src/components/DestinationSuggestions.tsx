@@ -1,12 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import type { DestinationSuggestion, LatLon } from "@/lib/types";
 
 const MiniRouteMap = dynamic(() => import("./MiniRouteMap"), {
   ssr: false,
   loading: () => (
-    <div className="h-28 w-full rounded bg-zinc-100 dark:bg-zinc-800 animate-pulse" />
+    <div className="h-28 w-full rounded bg-meewind-bg-raised animate-pulse" />
   ),
 });
 
@@ -21,16 +22,13 @@ export default function DestinationSuggestions({
   loading: boolean;
   onSelect: (s: DestinationSuggestion) => void;
 }) {
+  const t = useTranslations("planner.suggestions");
+
   if (loading) {
-    return <p className="text-xs text-zinc-500">Suche Zielvorschläge…</p>;
+    return <p className="text-xs text-meewind-fg-muted">{t("loading")}</p>;
   }
   if (suggestions.length === 0) {
-    return (
-      <p className="text-xs text-zinc-500">
-        Keine Zielvorschläge in dieser Distanz gefunden. Distanz anpassen oder
-        Ziel manuell eingeben.
-      </p>
-    );
+    return <p className="text-xs text-meewind-fg-muted">{t("empty")}</p>;
   }
 
   return (
@@ -38,7 +36,7 @@ export default function DestinationSuggestions({
       {suggestions.map((s) => (
         <div
           key={s.name}
-          className="rounded-md border border-zinc-300 dark:border-zinc-700 overflow-hidden"
+          className="rounded-md border border-meewind-border overflow-hidden"
         >
           {s.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -53,13 +51,13 @@ export default function DestinationSuggestions({
           )}
           <div className="p-2 flex flex-col gap-1">
             <span className="text-sm font-medium">{s.name}</span>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400">{s.reason}</p>
+            <p className="text-xs text-meewind-fg-muted">{s.reason}</p>
             <button
               type="button"
               onClick={() => onSelect(s)}
-              className="mt-1 rounded-md bg-blue-600 text-white text-xs font-medium py-1.5"
+              className="mt-1 rounded-md bg-meewind-accent text-meewind-accent-fg text-xs font-medium py-1.5"
             >
-              Diese Route planen
+              {t("planButton")}
             </button>
           </div>
         </div>

@@ -98,6 +98,7 @@ export default function RouteMap({
   wind = null,
   destination = null,
   homeMarker = null,
+  labels = { start: "Start", home: "Home", destination: "Destination" },
 }: {
   start: LatLon | null;
   onSetStart: (p: LatLon) => void;
@@ -107,6 +108,7 @@ export default function RouteMap({
   destination?: LatLon | null;
   /** Shown as a distinct house icon; used in scenic-route mode where `start` is the corridor entry station, not the rider's actual home. */
   homeMarker?: LatLon | null;
+  labels?: { start: string; home: string; destination: string };
 }) {
   const center = useMemo<[number, number]>(
     () => (start ? [start.lat, start.lon] : [52.09, 5.12]),
@@ -124,18 +126,18 @@ export default function RouteMap({
         <RecenterOnStart start={start} />
         {start && (
           <Marker position={[start.lat, start.lon]}>
-            <Popup>Start</Popup>
+            <Popup>{labels.start}</Popup>
           </Marker>
         )}
         <LegPolylines legs={legs} wind={wind} />
         {homeMarker && (
           <Marker position={[homeMarker.lat, homeMarker.lon]} icon={homeIcon}>
-            <Popup>Zuhause</Popup>
+            <Popup>{labels.home}</Popup>
           </Marker>
         )}
         {destination && (
           <Marker position={[destination.lat, destination.lon]} icon={destinationIcon}>
-            <Popup>Ziel</Popup>
+            <Popup>{labels.destination}</Popup>
           </Marker>
         )}
         {pois.map((poi) => (

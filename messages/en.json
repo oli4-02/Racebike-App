@@ -1,0 +1,198 @@
+{
+  "api": {
+    "invalidBody": "Invalid request body.",
+    "invalidRequest": "Invalid request.",
+    "onewayDestinationRequired": "A one-way trip requires a destination.",
+    "routePlanningFailed": "Route planning failed.",
+    "startDistanceRequired": "start and distanceKm are required.",
+    "destinationsFailed": "Destination suggestions failed.",
+    "geometryRequired": "geometry is required.",
+    "poiSearchFailed": "POI search failed.",
+    "corridorFieldsRequired": "corridorId, start, distanceKm, and date are required.",
+    "unknownCorridor": "Unknown corridor.",
+    "noExitTownFound": "No suitable destination found within the corridor. Please pick a different corridor or distance.",
+    "scenicRouteFailed": "Scenic route failed.",
+    "routeFieldsRequired": "routeId, start, distanceKm, and date are required.",
+    "unknownSignatureRoute": "Unknown signature route.",
+    "signatureRouteFailed": "Signature route failed.",
+    "searchTermTooShort": "Search term too short.",
+    "addressSearchFailed": "Address search failed.",
+    "stationFieldsRequired": "destLat, destLon, homeLat, and homeLon are required.",
+    "latLonDateRequired": "lat, lon, and date are required.",
+    "windForecastLimited": "Wind forecast is only available up to about 15 days ahead.",
+    "noWeatherData": "No weather data found for this date.",
+    "weatherQueryFailed": "Weather query failed."
+  },
+  "meta": {
+    "landingTitle": "Meewind — Road cycling with the wind, not against it",
+    "landingDescription": "Meewind plans wind-optimized road cycling routes across the Netherlands: node-network routes, destination suggestions, curated signature routes, and GPX export for Garmin & Strava.",
+    "plannerTitle": "Planner — Meewind",
+    "plannerDescription": "Pick a start point, set your distance, and plan a wind-optimized route along the Dutch cycle node network."
+  },
+  "nav": {
+    "wordmark": "MEEWIND",
+    "linkWind": "Wind Optimization",
+    "linkFeatures": "Features",
+    "cta": "Plan a route"
+  },
+  "landing": {
+    "hero": {
+      "kicker": "WITH THE WIND, NOT AGAINST IT",
+      "headline": "RIDE WITH THE WIND. NOT AGAINST IT.",
+      "sub": "Meewind plans your road cycling route across the Netherlands so the wind pushes you instead of slowing you down — plus node-network routes, destination suggestions, curated signature routes, and GPX export for Garmin & Strava.",
+      "ctaPrimary": "Plan a route",
+      "ctaSecondary": "How it works",
+      "photoAlt": "Road cyclist on a Dutch dike with wind turbines in the background"
+    },
+    "windMoment": {
+      "kicker": "THE CENTERPIECE",
+      "headline": "WIND-OPTIMIZED. ALWAYS.",
+      "body": "Meewind pulls real wind forecasts for your ride day and calculates every route in both directions. Whichever direction gets more tailwind in the harder second third of the ride is the one you ride — automatically, not as a checkbox buried in settings.",
+      "example": "Example: wind from the west at 24 km/h — the route is ridden counter-clockwise so the way back gets tailwind instead of a headwind.",
+      "photoAlt": "Wind-swept coastal road in Zeeland"
+    },
+    "features": {
+      "kicker": "FOUR TOOLS, ONE GOAL",
+      "items": [
+        {
+          "number": "01",
+          "title": "NODE-NETWORK ROUTES",
+          "body": "Loop rides along the Dutch cycle node network (fietsknooppunten) — pick a start point and distance, Meewind links the nodes into a full loop.",
+          "photoAlt": "Fietsknooppunt signpost at a junction"
+        },
+        {
+          "number": "02",
+          "title": "DESTINATION SUGGESTIONS",
+          "body": "No fixed destination? Meewind suggests worthwhile places within your target distance — with a preview route and an optional train ride home.",
+          "photoAlt": "Historic Dutch town center from above"
+        },
+        {
+          "number": "03",
+          "title": "SIGNATURE ROUTES",
+          "body": "19 curated routes across the country, from the Amstelroute to the Amstel Gold Race Loop in Zuid-Limburg — well-known tours, re-planned for wind and your priorities.",
+          "photoAlt": "Hilly road cycling route in Zuid-Limburg"
+        },
+        {
+          "number": "04",
+          "title": "GPX EXPORT",
+          "body": "Every planned route as a GPX file for Garmin, Strava, and Komoot — including cafés, fuel stations, and ice cream stops along the way.",
+          "photoAlt": "Road bike cockpit with a GPS device"
+        }
+      ]
+    },
+    "signup": {
+      "headline": "READY FOR A TAILWIND?",
+      "body": "Plan a route, let the wind forecast settle, ride.",
+      "cta": "Plan a route now"
+    },
+    "footer": {
+      "tagline": "Wind-optimized road cycling routes across the Netherlands.",
+      "domain": "meewind.cc"
+    }
+  },
+  "planner": {
+    "backToLanding": "← Back to home",
+    "header": {
+      "title": "Meewind Planner",
+      "subtitle": "Pick a start point, set your distance — Meewind plans the wind-optimized route along the node network."
+    },
+    "addressSearch": {
+      "startLabel": "Start address",
+      "startPlaceholder": "e.g. Utrecht, Domplein",
+      "destLabel": "Destination address"
+    },
+    "oneWay": {
+      "tabAddress": "Enter destination",
+      "tabSuggestions": "Open destination / suggestions",
+      "tabScenic": "Scenic route",
+      "destinationLabel": "Destination: {value}",
+      "searchButton": "Search suggestions for this distance",
+      "searching": "Searching…",
+      "suggestError": "Failed to load suggestions."
+    },
+    "suggestions": {
+      "loading": "Searching for destination suggestions…",
+      "empty": "No destination suggestions found for this distance. Adjust the distance or enter a destination manually.",
+      "planButton": "Plan this route"
+    },
+    "form": {
+      "tourType": "Tour type",
+      "modeRoundtrip": "Round trip",
+      "modeOneway": "One-way + train",
+      "modeSignature": "Signature route",
+      "distanceRoundtrip": "Distance",
+      "distanceSignature": "Target distance (adjusted on selection if needed)",
+      "distanceScenic": "Desired ride length within the corridor",
+      "distanceOneway": "Search distance for destination",
+      "date": "Ride date",
+      "poiTitle": "Points of interest",
+      "poiFuel": "⛽ Fuel station",
+      "poiSupermarket": "🛒 Supermarket",
+      "poiIceCream": "🍦 Ice cream",
+      "poiCafe": "☕ Café",
+      "hideSubmitSignature": "Pick a signature route above to plan the route directly.",
+      "hideSubmitScenic": "Pick a corridor above to plan the route directly.",
+      "submit": "Plan route",
+      "submitLoading": "Planning route…",
+      "submitHintNoStart": "Pick a start point via address search or by clicking the map.",
+      "submitHintNoDestination": "Please pick a destination first (enter an address or pick a suggestion)."
+    },
+    "priorities": {
+      "title": "Priorities",
+      "fewTrafficLights": "Few traffic lights/junctions",
+      "nature": "Lots of nature/water",
+      "poiDensity": "Lots of cafés/POIs",
+      "shortestTime": "Shortest time",
+      "tailwind": "Maximum tailwind"
+    },
+    "summary": {
+      "distance": "Distance",
+      "duration": "Ride time (estimated)",
+      "knooppunten": "Nodes",
+      "gpxExport": "Export GPX (Garmin / Strava)"
+    },
+    "scenic": {
+      "loading": "Loading corridors…",
+      "all": "All",
+      "errorLoad": "Could not load the corridor list.",
+      "errorPlan": "Scenic route failed.",
+      "entry": "Entry: {station}",
+      "plan": "Plan this route",
+      "planning": "Planning route…"
+    },
+    "signature": {
+      "loading": "Loading signature routes…",
+      "errorLoad": "Could not load the route list.",
+      "errorPlan": "Signature route failed.",
+      "distFromStart": "{km} km from your location",
+      "trainSuggested": "Train travel suggested",
+      "directStart": "ride straight from home",
+      "variableDistance": "variable distance",
+      "plan": "Plan this route",
+      "planning": "Planning route…",
+      "all": "All"
+    },
+    "train": {
+      "defaultTitle": "Train return",
+      "loading": "Loading NS connections…",
+      "ovFiets": "OV-fiets available: {count}",
+      "transfersOne": "{count} transfer",
+      "transfersOther": "{count} transfers"
+    },
+    "map": {
+      "loading": "Loading map…",
+      "start": "Start",
+      "home": "Home",
+      "destination": "Destination"
+    },
+    "home": {
+      "scenicOutboundTitle": "Outbound (home → entry)",
+      "scenicReturnTitle": "Return (exit → home)",
+      "signatureOutboundTitle": "Outbound (home → route start)",
+      "signatureReturnTitle": "Return (route end → home)",
+      "signatureStationHint": "Start is far away — travel by train to {station}.",
+      "signatureDirectHint": "Start is nearby — ride straight from home.",
+      "routeError": "Route planning failed."
+    }
+  }
+}

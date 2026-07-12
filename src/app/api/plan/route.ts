@@ -1,6 +1,8 @@
+import { getTranslations } from "next-intl/server";
 import { NextRequest, NextResponse } from "next/server";
 import { combineGeometry, planRoute, toRouteLegs } from "@/lib/routePlanner";
 import { routeChain } from "@/lib/osrm";
+import { resolveLocale } from "@/lib/resolveLocale";
 import {
   evaluateWindDirection,
   fetchWindForecast,
@@ -15,15 +17,20 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Ungültiger Request-Body." }, { status: 400 });
+    const locale = resolveLocale(req.nextUrl.searchParams.get("locale"));
+    const t = await getTranslations({ locale, namespace: "api" });
+    return NextResponse.json({ error: t("invalidBody") }, { status: 400 });
   }
 
+  const locale = resolveLocale(body.locale);
+  const t = await getTranslations({ locale, namespace: "api" });
+
   if (!body?.start || !body?.mode || !body?.distanceKm || !body?.date) {
-    return NextResponse.json({ error: "Ungültige Anfrage." }, { status: 400 });
+    return NextResponse.json({ error: t("invalidRequest") }, { status: 400 });
   }
   if (body.mode === "oneway" && !body.destination) {
     return NextResponse.json(
-      { error: "Für eine One-Way-Tour wird ein Ziel benötigt." },
+      { error: t("onewayDestinationRequired") },
       { status: 400 }
     );
   }
@@ -31,7 +38,7 @@ export async function POST(req: NextRequest) {
   const priorities = { ...DEFAULT_PRIORITIES, ...body.priorities };
 
   try {
-    let route = await planRoute({ ...body, priorities });
+    let route = await planRoute({ ...body, priorities, locale });
 
     if (isWithinForecastRange(body.date)) {
       const forecast = await fetchWindForecast(body.start, body.date);
@@ -49,13 +56,14 @@ export async function POST(req: NextRequest) {
             windLegs,
             wind.directionDeg,
             wind.speedKmh,
-            priorities.tailwind
+            priorities.tailwind,
+            locale
           );
 
           if (evaluation.chosenDirection === "reverse") {
             const reversedNodes = [...route.knooppunten].reverse();
             const sequence = [body.start, ...reversedNodes, body.start];
-            const osrmLegs = await routeChain(sequence);
+            const osrmLegs = await routeChain(sequence, locale);
             route = {
               ...route,
               knooppunten: reversedNodes,
@@ -76,8 +84,7 @@ export async function POST(req: NextRequest) {
     console.error(err);
     return NextResponse.json(
       {
-        error:
-          err instanceof Error ? err.message : "Routenplanung fehlgeschlagen.",
+        error: err instanceof Error ? err.message : t("routePlanningFailed"),
       },
       { status: 502 }
     );

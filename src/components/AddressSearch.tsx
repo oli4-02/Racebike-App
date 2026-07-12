@@ -1,18 +1,21 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { geocode, type GeocodeResult } from "@/lib/apiClient";
 import type { LatLon } from "@/lib/types";
 
 export default function AddressSearch({
   onSelect,
-  label = "Startadresse",
-  placeholder = "z.B. Utrecht, Domplein",
+  label,
+  placeholder,
 }: {
   onSelect: (p: LatLon, label: string) => void;
   label?: string;
   placeholder?: string;
 }) {
+  const t = useTranslations("planner.addressSearch");
+  const locale = useLocale();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -29,7 +32,7 @@ export default function AddressSearch({
       }
       setLoading(true);
       try {
-        const r = await geocode(q);
+        const r = await geocode(q, locale);
         setResults(r);
         setOpen(true);
       } catch {
@@ -41,29 +44,29 @@ export default function AddressSearch({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [query, locale]);
 
   return (
     <div className="relative">
-      <label className="block text-sm font-medium mb-1">{label}</label>
+      <label className="block text-sm font-medium mb-1">{label ?? t("startLabel")}</label>
       <input
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}
-        placeholder={placeholder}
-        className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
+        placeholder={placeholder ?? t("startPlaceholder")}
+        className="w-full rounded-md border border-meewind-border bg-meewind-bg-raised px-3 py-2 text-sm"
       />
       {loading && (
-        <div className="absolute right-2 top-9 text-xs text-zinc-500">…</div>
+        <div className="absolute right-2 top-9 text-xs text-meewind-fg-muted">…</div>
       )}
       {open && results.length > 0 && (
-        <ul className="absolute z-[1000] mt-1 w-full max-h-60 overflow-auto rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg text-sm">
+        <ul className="absolute z-[1000] mt-1 w-full max-h-60 overflow-auto rounded-md border border-meewind-border bg-meewind-bg-raised shadow-lg text-sm">
           {results.map((r, i) => (
             <li key={i}>
               <button
                 type="button"
-                className="w-full text-left px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                className="w-full text-left px-3 py-2 hover:bg-meewind-accent/10"
                 onClick={() => {
                   onSelect({ lat: r.lat, lon: r.lon }, r.displayName);
                   setQuery(r.displayName);

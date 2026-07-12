@@ -48,6 +48,8 @@ export type PlanRequest = {
   priorities?: Priorities;
   /** One-way trips always resolve to a concrete destination (typed address in Modus A, or a picked suggestion in Modus B). */
   destination?: LatLon;
+  /** UI language, used to localize wind explanations, POI labels, and error messages generated server-side. Defaults to "de". */
+  locale?: string;
 };
 
 export type RouteLeg = {

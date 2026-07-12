@@ -1,11 +1,10 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { fetchScenicCorridors, planScenicRoute } from "@/lib/apiClient";
-import { LANDSCAPE_EMOJI, LANDSCAPE_LABELS } from "@/lib/scenicCorridors";
+import { LANDSCAPE_EMOJI, useLandscapeLabels } from "@/lib/scenicCorridors";
 import type { LandscapeType, LatLon, Priorities, ScenicCorridor, ScenicRoutePlan } from "@/lib/types";
-
-const LANDSCAPE_TYPES = Object.keys(LANDSCAPE_LABELS) as LandscapeType[];
 
 export default function ScenicCorridorPicker({
   start,
@@ -20,6 +19,10 @@ export default function ScenicCorridorPicker({
   priorities: Priorities;
   onPlanned: (result: ScenicRoutePlan) => void;
 }) {
+  const t = useTranslations("planner.scenic");
+  const locale = useLocale();
+  const landscapeLabels = useLandscapeLabels();
+  const landscapeTypes = Object.keys(landscapeLabels) as LandscapeType[];
   const [corridors, setCorridors] = useState<ScenicCorridor[]>([]);
   const [loadingCorridors, setLoadingCorridors] = useState(true);
   const [filter, setFilter] = useState<LandscapeType | null>(null);
@@ -28,14 +31,14 @@ export default function ScenicCorridorPicker({
 
   useEffect(() => {
     let cancelled = false;
-    fetchScenicCorridors()
+    fetchScenicCorridors(locale)
       .then((c) => !cancelled && setCorridors(c))
-      .catch(() => !cancelled && setError("Korridor-Liste konnte nicht geladen werden."))
+      .catch(() => !cancelled && setError(t("errorLoad")))
       .finally(() => !cancelled && setLoadingCorridors(false));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale, t]);
 
   async function handlePick(corridor: ScenicCorridor) {
     setPlanningId(corridor.id);
@@ -47,10 +50,11 @@ export default function ScenicCorridorPicker({
         distanceKm,
         date,
         priorities,
+        locale,
       });
       onPlanned(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Landschafts-Route fehlgeschlagen.");
+      setError(e instanceof Error ? e.message : t("errorPlan"));
     } finally {
       setPlanningId(null);
     }
@@ -60,7 +64,7 @@ export default function ScenicCorridorPicker({
 
   return (
     <div className="flex flex-col gap-2">
-      {loadingCorridors && <p className="text-xs text-zinc-500">Lade Korridore…</p>}
+      {loadingCorridors && <p className="text-xs text-meewind-fg-muted">{t("loading")}</p>}
 
       {!loadingCorridors && (
         <div className="flex flex-wrap gap-1">
@@ -68,53 +72,53 @@ export default function ScenicCorridorPicker({
             type="button"
             className={`rounded-full border px-2 py-0.5 text-xs ${
               filter === null
-                ? "bg-blue-600 text-white border-blue-600"
-                : "border-zinc-300 dark:border-zinc-700"
+                ? "bg-meewind-accent text-meewind-accent-fg border-meewind-accent"
+                : "border-meewind-border"
             }`}
             onClick={() => setFilter(null)}
           >
-            Alle
+            {t("all")}
           </button>
-          {LANDSCAPE_TYPES.map((t) => (
+          {landscapeTypes.map((lt) => (
             <button
-              key={t}
+              key={lt}
               type="button"
               className={`rounded-full border px-2 py-0.5 text-xs ${
-                filter === t
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "border-zinc-300 dark:border-zinc-700"
+                filter === lt
+                  ? "bg-meewind-accent text-meewind-accent-fg border-meewind-accent"
+                  : "border-meewind-border"
               }`}
-              onClick={() => setFilter(t)}
+              onClick={() => setFilter(lt)}
             >
-              {LANDSCAPE_EMOJI[t]} {LANDSCAPE_LABELS[t]}
+              {LANDSCAPE_EMOJI[lt]} {landscapeLabels[lt]}
             </button>
           ))}
         </div>
       )}
 
-      {error && <p className="text-xs text-red-600 whitespace-pre-wrap break-words">{error}</p>}
+      {error && <p className="text-xs text-red-400 whitespace-pre-wrap break-words">{error}</p>}
 
       <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
         {visible.map((c) => (
           <div
             key={c.id}
-            className="rounded-md border border-zinc-300 dark:border-zinc-700 p-2 flex flex-col gap-1"
+            className="rounded-md border border-meewind-border p-2 flex flex-col gap-1"
           >
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">{c.name}</span>
-              <span className="text-xs text-zinc-500">
-                {LANDSCAPE_EMOJI[c.landscapeType]} {LANDSCAPE_LABELS[c.landscapeType]}
+              <span className="text-xs text-meewind-fg-muted">
+                {LANDSCAPE_EMOJI[c.landscapeType]} {landscapeLabels[c.landscapeType]}
               </span>
             </div>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400">{c.description}</p>
-            <p className="text-xs text-zinc-500">Einstieg: {c.entryStationName}</p>
+            <p className="text-xs text-meewind-fg-muted">{c.description}</p>
+            <p className="text-xs text-meewind-fg-muted">{t("entry", { station: c.entryStationName })}</p>
             <button
               type="button"
               onClick={() => handlePick(c)}
               disabled={planningId !== null}
-              className="mt-1 rounded-md bg-blue-600 text-white text-xs font-medium py-1.5 disabled:opacity-50"
+              className="mt-1 rounded-md bg-meewind-accent text-meewind-accent-fg text-xs font-medium py-1.5 disabled:opacity-50"
             >
-              {planningId === c.id ? "Route wird geplant…" : "Diese Route planen"}
+              {planningId === c.id ? t("planning") : t("plan")}
             </button>
           </div>
         ))}

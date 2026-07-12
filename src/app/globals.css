@@ -1,6 +1,21 @@
 @import "tailwindcss";
 
+/*
+ * "Deichgrün" design tokens — shared between the Meewind landing page and
+ * the planner app so both surfaces read as one product. Colors are kept as
+ * oklch() (not converted to hex) to match the source design exactly and
+ * avoid gamut/rounding drift. See the "Meewind Landing" Claude Design
+ * prototype (option 1b) this was extracted from.
+ */
 :root {
+  --meewind-bg: oklch(21% 0.045 155);
+  --meewind-bg-raised: oklch(26% 0.045 155);
+  --meewind-fg: oklch(95% 0.015 90);
+  --meewind-fg-muted: oklch(80% 0.02 100);
+  --meewind-accent: oklch(80% 0.17 128);
+  --meewind-accent-fg: oklch(20% 0.04 150);
+  --meewind-border: oklch(35% 0.03 150);
+
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -8,7 +23,17 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+
+  --color-meewind-bg: var(--meewind-bg);
+  --color-meewind-bg-raised: var(--meewind-bg-raised);
+  --color-meewind-fg: var(--meewind-fg);
+  --color-meewind-fg-muted: var(--meewind-fg-muted);
+  --color-meewind-accent: var(--meewind-accent);
+  --color-meewind-accent-fg: var(--meewind-accent-fg);
+  --color-meewind-border: var(--meewind-border);
+
+  --font-sans: var(--font-plex-sans);
+  --font-display: var(--font-archivo);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -22,5 +47,18 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-plex-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Shared uppercase display-type helper for Deichgrün headings (Archivo 900). */
+.meewind-display {
+  font-family: var(--font-archivo), sans-serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+
+/* Shared oblique clip-path used for buttons/panels in the Deichgrün design language. */
+.meewind-clip {
+  clip-path: polygon(4% 0, 100% 0, 96% 100%, 0 100%);
 }

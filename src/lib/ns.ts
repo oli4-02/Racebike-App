@@ -1,3 +1,5 @@
+import type { AppLocale } from "@/i18n/routing";
+import { NS_STRINGS } from "./i18nStrings";
 import type { LatLon, StationInfo, TrainInfo } from "./types";
 
 // NS (Nederlandse Spoorwegen) Reisinformatie API — https://apiportal.ns.nl
@@ -7,8 +9,11 @@ import type { LatLon, StationInfo, TrainInfo } from "./types";
 // this module as a best-effort client to verify once a key is available.
 const NS_BASE = "https://gateway.apiportal.ns.nl";
 
-export const NS_NOT_CONFIGURED_MESSAGE =
-  "Zugverbindung ist noch nicht aktiv: NS_API_KEY fehlt. Kostenlosen Key auf apiportal.ns.nl registrieren und als Umgebungsvariable NS_API_KEY setzen.";
+export const NS_NOT_CONFIGURED_MESSAGE = NS_STRINGS.de.notConfigured;
+
+export function nsNotConfiguredMessage(locale: AppLocale = "de"): string {
+  return NS_STRINGS[locale].notConfigured;
+}
 
 export type NsStation = {
   code: string;
@@ -22,29 +27,32 @@ export type OvFietsAvailability = {
   rentalBikesAvailable: number | null;
 };
 
-function assertApiKey(): string {
+function assertApiKey(locale: AppLocale): string {
   const key = process.env.NS_API_KEY;
   if (!key) {
-    throw new Error("NS_API_KEY ist nicht gesetzt.");
+    throw new Error(NS_STRINGS[locale].apiKeyMissing);
   }
   return key;
 }
 
-function headers(): HeadersInit {
-  return { "Ocp-Apim-Subscription-Key": assertApiKey() };
+function headers(locale: AppLocale): HeadersInit {
+  return { "Ocp-Apim-Subscription-Key": assertApiKey(locale) };
 }
 
 export function isNsConfigured(): boolean {
   return Boolean(process.env.NS_API_KEY);
 }
 
-export async function findNearestStation(point: LatLon): Promise<NsStation | null> {
+export async function findNearestStation(
+  point: LatLon,
+  locale: AppLocale = "de"
+): Promise<NsStation | null> {
   const url = `${NS_BASE}/reisinformatie-api/api/v2/stations/nearest?lat=${point.lat}&lng=${point.lon}`;
   const res = await fetch(url, {
-    headers: headers(),
+    headers: headers(locale),
     signal: AbortSignal.timeout(15000),
   });
-  if (!res.ok) throw new Error(`NS Stations-API antwortete ${res.status}`);
+  if (!res.ok) throw new Error(NS_STRINGS[locale].stationsApiError(res.status));
   const data = await res.json();
   const first = data?.payload?.[0];
   if (!first) return null;
@@ -57,11 +65,12 @@ export async function findNearestStation(point: LatLon): Promise<NsStation | nul
 }
 
 export async function ovFietsAvailability(
-  stationCode: string
+  stationCode: string,
+  locale: AppLocale = "de"
 ): Promise<OvFietsAvailability> {
   const url = `${NS_BASE}/reisinformatie-api/api/v3/ovfiets/${stationCode}`;
   const res = await fetch(url, {
-    headers: headers(),
+    headers: headers(locale),
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) return { stationCode, rentalBikesAvailable: null };
@@ -79,16 +88,17 @@ export type TripSummary = {
 export async function planTrip(
   fromStationCode: string,
   toStationCode: string,
-  dateTime: string
+  dateTime: string,
+  locale: AppLocale = "de"
 ): Promise<TripSummary[]> {
   const url =
     `${NS_BASE}/reisinformatie-api/api/v3/trips?fromStation=${fromStationCode}` +
     `&toStation=${toStationCode}&dateTime=${encodeURIComponent(dateTime)}`;
   const res = await fetch(url, {
-    headers: headers(),
+    headers: headers(locale),
     signal: AbortSignal.timeout(15000),
   });
-  if (!res.ok) throw new Error(`NS Trips-API antwortete ${res.status}`);
+  if (!res.ok) throw new Error(NS_STRINGS[locale].tripsApiError(res.status));
   const data: { trips?: NsTrip[] } = await res.json();
   const trips = data?.trips ?? [];
   return trips.slice(0, 5).map((t) => ({
@@ -113,25 +123,26 @@ export async function buildTrainInfo(
   from: StationInfo,
   to: StationInfo,
   dateTime: string,
-  nsConfigured: boolean
+  nsConfigured: boolean,
+  locale: AppLocale = "de"
 ): Promise<TrainInfo> {
   if (!nsConfigured) {
-    return { configured: false, message: NS_NOT_CONFIGURED_MESSAGE };
+    return { configured: false, message: NS_STRINGS[locale].notConfigured };
   }
   if (!from.code || !to.code) {
-    return { configured: true, error: "Kein Bahnhof in der Nähe gefunden." };
+    return { configured: true, error: NS_STRINGS[locale].noStationNearby };
   }
 
   try {
     const [trips, ovFiets] = await Promise.all([
-      planTrip(from.code, to.code, dateTime),
-      ovFietsAvailability(from.code),
+      planTrip(from.code, to.code, dateTime, locale),
+      ovFietsAvailability(from.code, locale),
     ]);
     return { configured: true, fromStation: from, toStation: to, trips, ovFiets };
   } catch (err) {
     return {
       configured: true,
-      error: err instanceof Error ? err.message : "NS-Abfrage fehlgeschlagen.",
+      error: err instanceof Error ? err.message : NS_STRINGS[locale].queryFailed,
     };
   }
 }

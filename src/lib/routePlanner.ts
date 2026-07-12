@@ -1,6 +1,9 @@
+import type { AppLocale } from "@/i18n/routing";
 import { bearing, distance, angleDiff } from "./geo";
+import { ROUTE_PLANNER_STRINGS } from "./i18nStrings";
 import { fetchAreaFeatures, fetchKnooppunten, type AreaFeatures } from "./overpass";
 import { routeChain, type OsrmLeg } from "./osrm";
+import { resolveLocale } from "./resolveLocale";
 import type {
   Knooppunt,
   LatLon,
@@ -272,8 +275,8 @@ export function toRouteLegs(sequence: LatLon[], osrmLegs: OsrmLeg[]): RouteLeg[]
   }));
 }
 
-async function reroute(sequence: LatLon[]) {
-  const osrmLegs = await routeChain(sequence);
+async function reroute(sequence: LatLon[], locale: AppLocale) {
+  const osrmLegs = await routeChain(sequence, locale);
   const totalDistanceM = osrmLegs.reduce((s, l) => s + l.distanceM, 0);
   const totalDurationS = osrmLegs.reduce((s, l) => s + l.durationS, 0);
   return { osrmLegs, totalDistanceM, totalDurationS };
@@ -284,9 +287,11 @@ const MAX_REFINE_ITERATIONS = 3;
 
 export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
   const priorities: Priorities = { ...DEFAULT_PRIORITIES, ...req.priorities };
+  const locale = resolveLocale(req.locale);
+  const strings = ROUTE_PLANNER_STRINGS[locale];
 
   if (req.mode === "oneway" && !req.destination) {
-    throw new Error("Für eine One-Way-Tour wird ein Ziel benötigt.");
+    throw new Error(strings.onewayDestinationRequired);
   }
 
   const approxTargetM =
@@ -300,14 +305,12 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
       : clampNum(approxTargetM * 0.9, 3000, 60000);
 
   const [pool, areaFeatures] = await Promise.all([
-    fetchKnooppunten(req.start, searchRadius),
-    fetchAreaFeatures(req.start, searchRadius, true),
+    fetchKnooppunten(req.start, searchRadius, locale),
+    fetchAreaFeatures(req.start, searchRadius, true, locale),
   ]);
 
   if (pool.length < 3) {
-    throw new Error(
-      "Zu wenige Knotenpunkte des Radnetzwerks in der Nähe gefunden. Bitte einen anderen Startpunkt oder eine größere Distanz wählen."
-    );
+    throw new Error(strings.tooFewNodes);
   }
 
   const featureScores = computeFeatureScores(pool, areaFeatures);
@@ -319,9 +322,7 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
     targetDistanceM = req.distanceKm * 1000;
     nodes = selectRoundTripNodes(req.start, pool, targetDistanceM, priorities, featureScores);
     if (nodes.length < 2) {
-      throw new Error(
-        "Es konnte keine sinnvolle Route aus den gefundenen Knotenpunkten gebaut werden."
-      );
+      throw new Error(strings.noSensibleRoute);
     }
   } else {
     const result = selectOneWayNodes(
@@ -341,7 +342,7 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
       : [req.start, ...ns, req.destination!];
 
   let sequence = buildSequence(nodes);
-  let { osrmLegs, totalDistanceM, totalDurationS } = await reroute(sequence);
+  let { osrmLegs, totalDistanceM, totalDurationS } = await reroute(sequence, locale);
 
   const minNodes = req.mode === "roundtrip" ? 2 : 0;
 
@@ -396,7 +397,7 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
     }
 
     sequence = buildSequence(nodes);
-    ({ osrmLegs, totalDistanceM, totalDurationS } = await reroute(sequence));
+    ({ osrmLegs, totalDistanceM, totalDurationS } = await reroute(sequence, locale));
   }
 
   return {

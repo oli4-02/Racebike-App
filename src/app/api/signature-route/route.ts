@@ -1,7 +1,9 @@
+import { getTranslations } from "next-intl/server";
 import { NextRequest, NextResponse } from "next/server";
-import { SIGNATURE_ROUTES } from "@/lib/signatureRoutes";
+import { signatureRoutesForLocale } from "@/lib/signatureRoutes";
 import { planRoute } from "@/lib/routePlanner";
 import { buildTrainInfo, findNearestStation, isNsConfigured } from "@/lib/ns";
+import { resolveLocale } from "@/lib/resolveLocale";
 import { distance } from "@/lib/geo";
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type { LatLon, Priorities, StationInfo } from "@/lib/types";
@@ -19,22 +21,29 @@ export async function POST(req: NextRequest) {
     distanceKm: number;
     date: string;
     priorities?: Priorities;
+    locale?: string;
   };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Ungültiger Request-Body." }, { status: 400 });
+    const locale = resolveLocale(req.nextUrl.searchParams.get("locale"));
+    const t = await getTranslations({ locale, namespace: "api" });
+    return NextResponse.json({ error: t("invalidBody") }, { status: 400 });
   }
+
+  const locale = resolveLocale(body.locale);
+  const t = await getTranslations({ locale, namespace: "api" });
+
   if (!body?.routeId || !body?.start || !body?.distanceKm || !body?.date) {
     return NextResponse.json(
-      { error: "routeId, start, distanceKm und date erforderlich." },
+      { error: t("routeFieldsRequired") },
       { status: 400 }
     );
   }
 
-  const signatureRoute = SIGNATURE_ROUTES.find((r) => r.id === body.routeId);
+  const signatureRoute = signatureRoutesForLocale(locale).find((r) => r.id === body.routeId);
   if (!signatureRoute) {
-    return NextResponse.json({ error: "Unbekannte Signature-Route." }, { status: 404 });
+    return NextResponse.json({ error: t("unknownSignatureRoute") }, { status: 404 });
   }
 
   const priorities: Priorities = { ...DEFAULT_PRIORITIES, ...body.priorities };
@@ -50,9 +59,11 @@ export async function POST(req: NextRequest) {
     if (useStation) {
       const [stationRaw, homeStationRaw] = await Promise.all([
         nsConfigured
-          ? findNearestStation(signatureRoute.center).catch(() => null)
+          ? findNearestStation(signatureRoute.center, locale).catch(() => null)
           : Promise.resolve(null),
-        nsConfigured ? findNearestStation(body.start).catch(() => null) : Promise.resolve(null),
+        nsConfigured
+          ? findNearestStation(body.start, locale).catch(() => null)
+          : Promise.resolve(null),
       ]);
 
       station = stationRaw ?? {
@@ -68,8 +79,8 @@ export async function POST(req: NextRequest) {
       anchor = station;
 
       [outboundTrain, returnTrain] = await Promise.all([
-        buildTrainInfo(homeStation, station, `${body.date}T08:30:00`, nsConfigured),
-        buildTrainInfo(station, homeStation, `${body.date}T16:00:00`, nsConfigured),
+        buildTrainInfo(homeStation, station, `${body.date}T08:30:00`, nsConfigured, locale),
+        buildTrainInfo(station, homeStation, `${body.date}T16:00:00`, nsConfigured, locale),
       ]);
     } else {
       anchor = body.start;
@@ -81,6 +92,7 @@ export async function POST(req: NextRequest) {
       distanceKm: body.distanceKm,
       date: body.date,
       priorities,
+      locale,
     });
 
     return NextResponse.json({
@@ -95,8 +107,7 @@ export async function POST(req: NextRequest) {
     console.error(err);
     return NextResponse.json(
       {
-        error:
-          err instanceof Error ? err.message : "Signature-Route fehlgeschlagen.",
+        error: err instanceof Error ? err.message : t("signatureRouteFailed"),
       },
       { status: 502 }
     );

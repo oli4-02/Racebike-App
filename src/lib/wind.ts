@@ -1,4 +1,6 @@
+import type { AppLocale } from "@/i18n/routing";
 import { angleDiff, bearing, toRad } from "./geo";
+import { COMPASS_LABELS, WIND_EXPLANATION } from "./i18nStrings";
 import type { LatLon, WindEvaluation, WindForecast } from "./types";
 
 const OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast";
@@ -91,7 +93,8 @@ export function evaluateWindDirection(
   legs: WindLeg[],
   windDirectionDeg: number,
   windSpeedKmh: number,
-  tailwindPriority = 1
+  tailwindPriority = 1,
+  locale: AppLocale = "de"
 ): WindEvaluation {
   const forwardScore = weightedTailwindScore(legs, windDirectionDeg, tailwindPriority);
   const reversed = [...legs].reverse().map((leg) => ({
@@ -104,12 +107,12 @@ export function evaluateWindDirection(
   const chosenDirection: "forward" | "reverse" =
     forwardScore >= reverseScore ? "forward" : "reverse";
 
-  const compass = compassLabel(windDirectionDeg);
+  const compass = compassLabel(windDirectionDeg, locale);
+  const speedLabel = windSpeedKmh.toFixed(0);
   const explanation =
-    `Wind aus ${compass} mit ${windSpeedKmh.toFixed(0)} km/h: ` +
-    (chosenDirection === "forward"
-      ? "Fahrtrichtung wie geplant gibt mehr Rückenwind im zweiten (anstrengenderen) Streckenteil."
-      : "Route wird umgekehrt gefahren, damit der zweite (anstrengendere) Streckenteil mehr Rückenwind bekommt.");
+    chosenDirection === "forward"
+      ? WIND_EXPLANATION[locale].forward(compass, speedLabel)
+      : WIND_EXPLANATION[locale].reverse(compass, speedLabel);
 
   return {
     chosenDirection,
@@ -144,8 +147,8 @@ function weightedTailwindScore(
   return weightTotal > 0 ? weightedSum / weightTotal : 0;
 }
 
-function compassLabel(deg: number): string {
-  const labels = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"];
+function compassLabel(deg: number, locale: AppLocale): string {
+  const labels = COMPASS_LABELS[locale];
   const index = Math.round(((deg % 360) / 45)) % 8;
   return labels[index];
 }

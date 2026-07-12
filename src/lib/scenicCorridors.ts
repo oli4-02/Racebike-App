@@ -1,13 +1,44 @@
+import { useLocale } from "next-intl";
+import type { AppLocale } from "@/i18n/routing";
+import { SCENIC_CORRIDOR_DESCRIPTIONS } from "./curatedTranslations";
+import { resolveLocale } from "./resolveLocale";
 import type { LandscapeType, ScenicCorridor } from "./types";
 
-export const LANDSCAPE_LABELS: Record<LandscapeType, string> = {
-  duenen_kueste: "Dünen/Küste",
-  wald: "Wald",
-  polder: "Polder",
-  heide_moor: "Heide/Moor",
-  heuvelland: "Heuvelland",
-  fluss_meer: "Fluss/Meer",
+const LANDSCAPE_LABELS_BY_LOCALE: Record<AppLocale, Record<LandscapeType, string>> = {
+  de: {
+    duenen_kueste: "Dünen/Küste",
+    wald: "Wald",
+    polder: "Polder",
+    heide_moor: "Heide/Moor",
+    heuvelland: "Heuvelland",
+    fluss_meer: "Fluss/Meer",
+  },
+  en: {
+    duenen_kueste: "Dunes/Coast",
+    wald: "Forest",
+    polder: "Polder",
+    heide_moor: "Heath/Bog",
+    heuvelland: "Rolling hills",
+    fluss_meer: "River/Lake",
+  },
+  nl: {
+    duenen_kueste: "Duinen/Kust",
+    wald: "Bos",
+    polder: "Polder",
+    heide_moor: "Heide/Moeras",
+    heuvelland: "Heuvelland",
+    fluss_meer: "Rivier/Meer",
+  },
 };
+
+/** German landscape-type labels, kept as the default export for any non-locale-aware call site. */
+export const LANDSCAPE_LABELS = LANDSCAPE_LABELS_BY_LOCALE.de;
+
+/** Client-component hook returning landscape-type labels in the active locale. */
+export function useLandscapeLabels(): Record<LandscapeType, string> {
+  const locale = resolveLocale(useLocale());
+  return LANDSCAPE_LABELS_BY_LOCALE[locale];
+}
 
 export const LANDSCAPE_EMOJI: Record<LandscapeType, string> = {
   duenen_kueste: "🏖️",
@@ -228,3 +259,11 @@ export const SCENIC_CORRIDORS: ScenicCorridor[] = [
     entryStationName: "Hilversum",
   },
 ];
+
+/** Returns SCENIC_CORRIDORS with `description` swapped to the requested locale (falls back to the German source text if a translation is missing). */
+export function scenicCorridorsForLocale(locale: AppLocale): ScenicCorridor[] {
+  return SCENIC_CORRIDORS.map((c) => ({
+    ...c,
+    description: SCENIC_CORRIDOR_DESCRIPTIONS[c.id]?.[locale] ?? c.description,
+  }));
+}

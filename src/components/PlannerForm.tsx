@@ -1,17 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import PrioritySliders from "./PrioritySliders";
 import type { OneWaySubMode } from "./OneWayTargetPicker";
 import type { POICategory, Priorities } from "@/lib/types";
 
 export type AppMode = "roundtrip" | "oneway" | "signature";
 
-const POI_OPTIONS: { key: POICategory; label: string }[] = [
-  { key: "fuel", label: "⛽ Tankstelle" },
-  { key: "supermarket", label: "🛒 Supermarkt" },
-  { key: "ice_cream", label: "🍦 Eisdiele" },
-  { key: "cafe", label: "☕ Café" },
-];
+const POI_CATEGORIES: POICategory[] = ["fuel", "supermarket", "ice_cream", "cafe"];
 
 export default function PlannerForm(props: {
   appMode: AppMode;
@@ -48,9 +44,17 @@ export default function PlannerForm(props: {
     oneWaySubMode,
   } = props;
 
+  const t = useTranslations("planner.form");
   const isScenicMode = appMode === "oneway" && oneWaySubMode === "scenic";
   const isSignatureMode = appMode === "signature";
   const hidesSubmit = isScenicMode || isSignatureMode;
+
+  const poiLabels: Record<POICategory, string> = {
+    fuel: t("poiFuel"),
+    supermarket: t("poiSupermarket"),
+    ice_cream: t("poiIceCream"),
+    cafe: t("poiCafe"),
+  };
 
   function togglePoi(cat: POICategory) {
     setPoiCategories(
@@ -63,28 +67,28 @@ export default function PlannerForm(props: {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <span className="block text-sm font-medium mb-1">Tourtyp</span>
-        <div className="flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-700 text-sm">
+        <span className="block text-sm font-medium mb-1">{t("tourType")}</span>
+        <div className="flex rounded-md overflow-hidden border border-meewind-border text-sm">
           <button
             type="button"
-            className={`flex-1 px-3 py-2 ${appMode === "roundtrip" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
+            className={`flex-1 px-3 py-2 ${appMode === "roundtrip" ? "bg-meewind-accent text-meewind-accent-fg" : "bg-meewind-bg-raised"}`}
             onClick={() => setAppMode("roundtrip")}
           >
-            Rundtour
+            {t("modeRoundtrip")}
           </button>
           <button
             type="button"
-            className={`flex-1 px-3 py-2 ${appMode === "oneway" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
+            className={`flex-1 px-3 py-2 ${appMode === "oneway" ? "bg-meewind-accent text-meewind-accent-fg" : "bg-meewind-bg-raised"}`}
             onClick={() => setAppMode("oneway")}
           >
-            One-Way + Zug
+            {t("modeOneway")}
           </button>
           <button
             type="button"
-            className={`flex-1 px-3 py-2 ${appMode === "signature" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
+            className={`flex-1 px-3 py-2 ${appMode === "signature" ? "bg-meewind-accent text-meewind-accent-fg" : "bg-meewind-bg-raised"}`}
             onClick={() => setAppMode("signature")}
           >
-            Signature-Route
+            {t("modeSignature")}
           </button>
         </div>
       </div>
@@ -93,12 +97,12 @@ export default function PlannerForm(props: {
         <label className="flex justify-between text-sm font-medium mb-1">
           <span>
             {appMode === "roundtrip"
-              ? "Distanz"
+              ? t("distanceRoundtrip")
               : isSignatureMode
-                ? "Ziel-Distanz (wird beim Auswählen ggf. angepasst)"
+                ? t("distanceSignature")
                 : isScenicMode
-                  ? "Gewünschte Fahrlänge im Korridor"
-                  : "Such-Distanz für Ziel"}
+                  ? t("distanceScenic")
+                  : t("distanceOneway")}
           </span>
           <span>{distanceKm} km</span>
         </label>
@@ -114,44 +118,40 @@ export default function PlannerForm(props: {
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Fahrtdatum</label>
+        <label className="block text-sm font-medium mb-1">{t("date")}</label>
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-meewind-border bg-meewind-bg-raised px-3 py-2 text-sm"
         />
       </div>
 
       <PrioritySliders priorities={priorities} setPriorities={setPriorities} />
 
       <div>
-        <span className="block text-sm font-medium mb-1">
-          Points of Interest
-        </span>
+        <span className="block text-sm font-medium mb-1">{t("poiTitle")}</span>
         <div className="flex flex-wrap gap-2">
-          {POI_OPTIONS.map((opt) => (
+          {POI_CATEGORIES.map((cat) => (
             <button
-              key={opt.key}
+              key={cat}
               type="button"
               className={`rounded-full border px-3 py-1 text-xs ${
-                poiCategories.includes(opt.key)
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "border-zinc-300 dark:border-zinc-700"
+                poiCategories.includes(cat)
+                  ? "bg-meewind-accent text-meewind-accent-fg border-meewind-accent"
+                  : "border-meewind-border"
               }`}
-              onClick={() => togglePoi(opt.key)}
+              onClick={() => togglePoi(cat)}
             >
-              {opt.label}
+              {poiLabels[cat]}
             </button>
           ))}
         </div>
       </div>
 
       {hidesSubmit ? (
-        <p className="text-xs text-zinc-500">
-          {isSignatureMode
-            ? "Oben eine Signature-Route auswählen, um die Route direkt zu planen."
-            : "Oben einen Korridor auswählen, um die Route direkt zu planen."}
+        <p className="text-xs text-meewind-fg-muted">
+          {isSignatureMode ? t("hideSubmitSignature") : t("hideSubmitScenic")}
         </p>
       ) : (
         <>
@@ -159,12 +159,12 @@ export default function PlannerForm(props: {
             type="button"
             disabled={!canSubmit || loading}
             onClick={onSubmit}
-            className="rounded-md bg-blue-600 text-white py-2.5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-md bg-meewind-accent text-meewind-accent-fg py-2.5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? "Route wird geplant…" : "Route planen"}
+            {loading ? t("submitLoading") : t("submit")}
           </button>
           {!canSubmit && submitHint && (
-            <p className="text-xs text-zinc-500">{submitHint}</p>
+            <p className="text-xs text-meewind-fg-muted">{submitHint}</p>
           )}
         </>
       )}

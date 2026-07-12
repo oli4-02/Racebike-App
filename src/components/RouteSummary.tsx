@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { buildGpx } from "@/lib/gpx";
 import type { PlannedRoute, POI } from "@/lib/types";
 
@@ -11,7 +12,7 @@ function formatDuration(seconds: number): string {
 
 function downloadGpx(route: PlannedRoute, pois: POI[]) {
   const gpx = buildGpx({
-    name: `Rennrad-Tour ${new Date().toISOString().slice(0, 10)}`,
+    name: `Meewind ${new Date().toISOString().slice(0, 10)}`,
     geometry: route.geometry,
     pois,
   });
@@ -31,29 +32,31 @@ export default function RouteSummary({
   route: PlannedRoute;
   pois: POI[];
 }) {
+  const t = useTranslations("planner.summary");
+
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-zinc-300 dark:border-zinc-700 p-3 text-sm">
+    <div className="flex flex-col gap-3 rounded-md border border-meewind-border p-3 text-sm">
       <div className="flex justify-between">
-        <span className="text-zinc-500">Distanz</span>
+        <span className="text-meewind-fg-muted">{t("distance")}</span>
         <span className="font-medium">
           {(route.totalDistanceM / 1000).toFixed(1)} km
         </span>
       </div>
       <div className="flex justify-between">
-        <span className="text-zinc-500">Fahrzeit (geschätzt)</span>
+        <span className="text-meewind-fg-muted">{t("duration")}</span>
         <span className="font-medium">
           {formatDuration(route.totalDurationS)}
         </span>
       </div>
       <div className="flex justify-between">
-        <span className="text-zinc-500">Knotenpunkte</span>
+        <span className="text-meewind-fg-muted">{t("knooppunten")}</span>
         <span className="font-medium">
           {route.knooppunten.map((k) => k.ref).join(" – ") || "–"}
         </span>
       </div>
 
       {route.wind && (
-        <div className="rounded-md bg-blue-50 dark:bg-blue-950 p-2 text-xs text-blue-900 dark:text-blue-200">
+        <div className="rounded-md bg-meewind-accent/10 p-2 text-xs text-meewind-fg">
           {route.wind.explanation}
         </div>
       )}
@@ -61,9 +64,9 @@ export default function RouteSummary({
       <button
         type="button"
         onClick={() => downloadGpx(route, pois)}
-        className="rounded-md border border-zinc-300 dark:border-zinc-700 py-2 text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800"
+        className="rounded-md border border-meewind-border py-2 text-sm font-medium hover:bg-meewind-bg-raised"
       >
-        GPX exportieren (Garmin / Strava)
+        {t("gpxExport")}
       </button>
     </div>
   );

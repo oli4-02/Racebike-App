@@ -1,4 +1,7 @@
+import { getTranslations } from "next-intl/server";
 import { NextRequest, NextResponse } from "next/server";
+import type { AppLocale } from "@/i18n/routing";
+import { DESTINATION_STRINGS } from "@/lib/i18nStrings";
 import {
   fetchAreaFeatures,
   fetchTourismHistoricPoints,
@@ -8,6 +11,7 @@ import {
 import { fetchWikipediaInfo, type WikipediaInfo } from "@/lib/wikipedia";
 import { routeLeg } from "@/lib/osrm";
 import { findNearestStation, isNsConfigured } from "@/lib/ns";
+import { resolveLocale } from "@/lib/resolveLocale";
 import { bearing, distance } from "@/lib/geo";
 import {
   fetchWindForecast,
@@ -30,17 +34,26 @@ const PREVIEW_MAX_POINTS = 100;
 type Candidate = TownCandidate & { distFromStart: number };
 
 export async function POST(req: NextRequest) {
-  let body: { start: LatLon; distanceKm: number; date?: string; priorities?: Priorities };
+  let body: {
+    start: LatLon;
+    distanceKm: number;
+    date?: string;
+    priorities?: Priorities;
+    locale?: string;
+  };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Ungültiger Request-Body." }, { status: 400 });
+    const locale = resolveLocale(req.nextUrl.searchParams.get("locale"));
+    const t = await getTranslations({ locale, namespace: "api" });
+    return NextResponse.json({ error: t("invalidBody") }, { status: 400 });
   }
+
+  const locale = resolveLocale(body.locale);
+  const t = await getTranslations({ locale, namespace: "api" });
+
   if (!body?.start || !body?.distanceKm) {
-    return NextResponse.json(
-      { error: "start und distanceKm erforderlich." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: t("startDistanceRequired") }, { status: 400 });
   }
 
   const priorities: Priorities = { ...DEFAULT_PRIORITIES, ...body.priorities };
@@ -55,7 +68,7 @@ export async function POST(req: NextRequest) {
             .catch(() => null)
         : null;
 
-    const towns = await fetchTowns(start, targetDistanceM * 1.3);
+    const towns = await fetchTowns(start, targetDistanceM * 1.3, locale);
     const inRange: Candidate[] = towns
       .map((t) => ({ ...t, distFromStart: distance(start, t) }))
       .filter(
@@ -77,8 +90,8 @@ export async function POST(req: NextRequest) {
       .slice(0, PRESCORE_CANDIDATE_CAP);
 
     const [tourismPoints, areaFeatures, wikiInfos] = await Promise.all([
-      fetchTourismHistoricPoints(preScored, TOWN_CENTER_RADIUS_M),
-      fetchAreaFeatures(start, targetDistanceM * 1.3),
+      fetchTourismHistoricPoints(preScored, TOWN_CENTER_RADIUS_M, locale),
+      fetchAreaFeatures(start, targetDistanceM * 1.3, false, locale),
       Promise.all(preScored.map((c) => fetchWikipediaInfo(c.name))),
     ]);
 
@@ -100,7 +113,7 @@ export async function POST(req: NextRequest) {
       .slice(0, MAX_SUGGESTIONS);
 
     const suggestions = await Promise.all(
-      ranked.map(({ candidate, wiki }) => buildSuggestion(candidate, wiki, start))
+      ranked.map(({ candidate, wiki }) => buildSuggestion(candidate, wiki, start, locale))
     );
 
     return NextResponse.json({ suggestions });
@@ -108,8 +121,7 @@ export async function POST(req: NextRequest) {
     console.error(err);
     return NextResponse.json(
       {
-        error:
-          err instanceof Error ? err.message : "Zielvorschläge fehlgeschlagen.",
+        error: err instanceof Error ? err.message : t("destinationsFailed"),
       },
       { status: 502 }
     );
@@ -171,11 +183,12 @@ function scoreCandidate(
 async function buildSuggestion(
   town: Candidate,
   wiki: WikipediaInfo | null,
-  start: LatLon
+  start: LatLon,
+  locale: AppLocale
 ): Promise<DestinationSuggestion> {
   const [station, preview] = await Promise.all([
-    isNsConfigured() ? findNearestStation(town).catch(() => null) : Promise.resolve(null),
-    routeLeg(start, town).catch(() => null),
+    isNsConfigured() ? findNearestStation(town, locale).catch(() => null) : Promise.resolve(null),
+    routeLeg(start, town, locale).catch(() => null),
   ]);
 
   const hasNearbyStation = Boolean(
@@ -184,7 +197,7 @@ async function buildSuggestion(
   const distanceKm = town.distFromStart / 1000;
 
   const parts = [truncate(wiki?.extract ?? null, 140), `${distanceKm.toFixed(0)} km`];
-  if (hasNearbyStation) parts.push("Bahnhof vor Ort");
+  if (hasNearbyStation) parts.push(DESTINATION_STRINGS[locale].stationOnSite);
   const reason = `${town.name} – ${parts.filter(Boolean).join(", ")}`;
 
   return {
