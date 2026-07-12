@@ -8,6 +8,12 @@ import type { LatLon } from "./types";
 // placeholder to use here regardless of the actual (bike) backend.
 const OSRM_BASE = "https://routing.openstreetmap.de/routed-bike/route/v1/driving";
 
+const OSRM_HEADERS = {
+  Accept: "application/json",
+  "User-Agent":
+    "racebike-app/0.1 (personal cycling route planner; https://github.com/oli4-02/Racebike-App)",
+};
+
 export type OsrmLeg = {
   distanceM: number;
   durationS: number;
@@ -19,13 +25,21 @@ export async function routeLeg(a: LatLon, b: LatLon): Promise<OsrmLeg> {
   const coords = `${a.lon},${a.lat};${b.lon},${b.lat}`;
   const url = `${OSRM_BASE}/${coords}?overview=full&geometries=geojson&steps=false`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  const res = await fetch(url, {
+    headers: OSRM_HEADERS,
+    signal: AbortSignal.timeout(20000),
+  });
   if (!res.ok) {
-    throw new Error(`OSRM responded ${res.status}`);
+    const bodySnippet = (await res.text().catch(() => "")).slice(0, 300);
+    throw new Error(
+      `OSRM antwortete HTTP ${res.status} ${res.statusText}${
+        bodySnippet ? `: ${bodySnippet}` : ""
+      }`
+    );
   }
   const data = await res.json();
   if (data.code !== "Ok" || !data.routes?.length) {
-    throw new Error(`OSRM could not find a route: ${data.code ?? "unknown"}`);
+    throw new Error(`OSRM konnte keine Route finden: ${data.code ?? "unknown"}`);
   }
 
   const route = data.routes[0];

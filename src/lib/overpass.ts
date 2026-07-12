@@ -5,6 +5,18 @@ const OVERPASS_ENDPOINTS = [
   "https://lz4.overpass-api.de/api/interpreter",
 ];
 
+// Overpass's usage policy requires a descriptive User-Agent; requests
+// without one (or with a generic runtime default like Node's "node") are
+// routinely rejected by its abuse-prevention layer, typically with 406 or
+// 429. An explicit Accept header avoids the same layer content-negotiating
+// its way to a response format it thinks we can't handle.
+const OVERPASS_HEADERS = {
+  "Content-Type": "application/x-www-form-urlencoded",
+  Accept: "application/json",
+  "User-Agent":
+    "racebike-app/0.1 (personal cycling route planner; https://github.com/oli4-02/Racebike-App)",
+};
+
 type OverpassElement = {
   type: string;
   id: number;
@@ -18,25 +30,35 @@ type OverpassResponse = {
 };
 
 async function runOverpassQuery(query: string): Promise<OverpassResponse> {
-  let lastError: unknown;
+  const attempts: string[] = [];
+
   for (const endpoint of OVERPASS_ENDPOINTS) {
     try {
       const res = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: OVERPASS_HEADERS,
         body: "data=" + encodeURIComponent(query),
         signal: AbortSignal.timeout(30000),
       });
       if (!res.ok) {
-        throw new Error(`Overpass responded ${res.status}`);
+        const bodySnippet = (await res.text().catch(() => "")).slice(0, 300);
+        attempts.push(
+          `${endpoint} -> HTTP ${res.status} ${res.statusText}${
+            bodySnippet ? `: ${bodySnippet}` : ""
+          }`
+        );
+        continue;
       }
       return await res.json();
     } catch (err) {
-      lastError = err;
+      attempts.push(
+        `${endpoint} -> ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   }
+
   throw new Error(
-    `Overpass request failed on all mirrors: ${String(lastError)}`
+    `Overpass-Anfrage an allen Servern fehlgeschlagen:\n${attempts.join("\n")}`
   );
 }
 

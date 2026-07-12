@@ -104,7 +104,7 @@ export default function Home() {
         />
 
         {error && (
-          <div className="rounded-md bg-red-50 dark:bg-red-950 p-2 text-xs text-red-700 dark:text-red-300">
+          <div className="rounded-md bg-red-50 dark:bg-red-950 p-2 text-xs text-red-700 dark:text-red-300 whitespace-pre-wrap break-words">
             {error}
           </div>
         )}
