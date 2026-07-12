@@ -92,6 +92,7 @@ export default function OneWayTargetPicker({
           )}
           {!suggestError && hasSearched && (
             <DestinationSuggestions
+              start={start}
               suggestions={suggestions}
               loading={loadingSuggestions}
               onSelect={(s) => onSelectDestination({ lat: s.lat, lon: s.lon }, s.name)}

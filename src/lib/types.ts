@@ -95,4 +95,6 @@ export type DestinationSuggestion = {
   imageUrl: string | null;
   hasNearbyStation: boolean;
   reason: string;
+  /** Decimated direct-OSRM preview route (start -> candidate), for the mini map on the suggestion card. Not the final knooppunt-based route. */
+  previewGeometry: LatLon[];
 };

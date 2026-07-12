@@ -1,12 +1,22 @@
 "use client";
 
-import type { DestinationSuggestion } from "@/lib/types";
+import dynamic from "next/dynamic";
+import type { DestinationSuggestion, LatLon } from "@/lib/types";
+
+const MiniRouteMap = dynamic(() => import("./MiniRouteMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-28 w-full rounded bg-zinc-100 dark:bg-zinc-800 animate-pulse" />
+  ),
+});
 
 export default function DestinationSuggestions({
+  start,
   suggestions,
   loading,
   onSelect,
 }: {
+  start: LatLon;
   suggestions: DestinationSuggestion[];
   loading: boolean;
   onSelect: (s: DestinationSuggestion) => void;
@@ -32,10 +42,13 @@ export default function DestinationSuggestions({
         >
           {s.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={s.imageUrl}
-              alt={s.name}
-              className="w-full h-28 object-cover"
+            <img src={s.imageUrl} alt={s.name} className="w-full h-20 object-cover" />
+          )}
+          {s.previewGeometry.length > 1 && (
+            <MiniRouteMap
+              start={start}
+              destination={{ lat: s.lat, lon: s.lon }}
+              geometry={s.previewGeometry}
             />
           )}
           <div className="p-2 flex flex-col gap-1">

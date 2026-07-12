@@ -45,7 +45,7 @@ function computeFeatureScores(
     const trafficCount = features.trafficPoints.filter(
       (p) => distance(node, p) <= TRAFFIC_RADIUS_M
     ).length;
-    const natureCount = features.naturePoints.filter(
+    const natureCount = [...features.waterPoints, ...features.greenPoints].filter(
       (p) => distance(node, p) <= NATURE_RADIUS_M
     ).length;
     const poiCount = features.poiPoints.filter(

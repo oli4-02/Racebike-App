@@ -140,15 +140,16 @@ out body;`;
 
 export type AreaFeatures = {
   trafficPoints: LatLon[];
-  naturePoints: LatLon[];
+  waterPoints: LatLon[];
+  greenPoints: LatLon[];
   poiPoints: LatLon[];
 };
 
 /**
  * Single combined query for the criteria that bias knooppunt selection:
- * traffic signals/crossings (fewer nearby = better), nature/water (more
- * nearby = better), and cafes/ice cream (more nearby = better). One
- * Overpass round-trip instead of three, using `out center` so way/relation
+ * traffic signals/crossings (fewer nearby = better), water and green space
+ * (more nearby = better), and cafes/ice cream (more nearby = better). One
+ * Overpass round-trip instead of four, using `out center` so way/relation
  * results (water bodies, forests) also come back as a single point.
  */
 export async function fetchAreaFeatures(
@@ -173,13 +174,19 @@ out center;`;
   const data = await runOverpassQuery(query);
   const elements = data.elements ?? [];
 
-  const features: AreaFeatures = { trafficPoints: [], naturePoints: [], poiPoints: [] };
+  const features: AreaFeatures = {
+    trafficPoints: [],
+    waterPoints: [],
+    greenPoints: [],
+    poiPoints: [],
+  };
   for (const el of elements) {
     const point = elementPoint(el);
     if (!point) continue;
     const bucket = bucketAreaFeature(el.tags ?? {});
     if (bucket === "traffic") features.trafficPoints.push(point);
-    else if (bucket === "nature") features.naturePoints.push(point);
+    else if (bucket === "water") features.waterPoints.push(point);
+    else if (bucket === "green") features.greenPoints.push(point);
     else if (bucket === "poi") features.poiPoints.push(point);
   }
   return features;
@@ -187,20 +194,56 @@ out center;`;
 
 function bucketAreaFeature(
   tags: Record<string, string>
-): "traffic" | "nature" | "poi" | null {
+): "traffic" | "water" | "green" | "poi" | null {
   if (tags.highway === "traffic_signals" || tags.highway === "crossing")
     return "traffic";
+  if (tags.natural === "water" || tags.waterway) return "water";
   if (
-    tags.natural === "water" ||
-    tags.waterway ||
     tags.natural === "wood" ||
     tags.landuse === "forest" ||
     tags.landuse === "wood"
   )
-    return "nature";
+    return "green";
   if (tags.amenity === "cafe" || tags.amenity === "ice_cream" || tags.shop === "ice_cream")
     return "poi";
   return null;
+}
+
+/**
+ * Density of tourism and historic features (OSM tourism=* / historic=* tags)
+ * around each of the given town centers ("Ortskern"), used as an
+ * attractiveness signal for destination suggestions. One Overpass query
+ * with a separate around-circle per center (not a polyline-around across
+ * all centers, which would also pick up everything along the straight line
+ * connecting distant towns).
+ */
+export async function fetchTourismHistoricPoints(
+  centers: LatLon[],
+  radiusM: number
+): Promise<LatLon[]> {
+  if (centers.length === 0) return [];
+
+  const clauses = centers.flatMap((c) => {
+    const around = `around:${radiusM},${c.lat},${c.lon}`;
+    return [
+      `node["tourism"](${around});`,
+      `way["tourism"](${around});`,
+      `node["historic"](${around});`,
+      `way["historic"](${around});`,
+    ];
+  });
+
+  const query = `[out:json][timeout:30];
+(
+${clauses.map((c) => "  " + c).join("\n")}
+);
+out center;`;
+
+  const data = await runOverpassQuery(query);
+  const elements = data.elements ?? [];
+  return elements
+    .map((el) => elementPoint(el))
+    .filter((p): p is LatLon => p !== null);
 }
 
 export type TownCandidate = {
@@ -209,13 +252,13 @@ export type TownCandidate = {
   lon: number;
 };
 
-/** Fetches place=city/town points within radiusM of center, for one-way destination suggestions. */
+/** Fetches place=city/town/village points within radiusM of center, for one-way destination suggestions. */
 export async function fetchTowns(
   center: LatLon,
   radiusM: number
 ): Promise<TownCandidate[]> {
   const query = `[out:json][timeout:25];
-node["place"~"^(city|town)$"](around:${radiusM},${center.lat},${center.lon});
+node["place"~"^(city|town|village)$"](around:${radiusM},${center.lat},${center.lon});
 out center;`;
 
   const data = await runOverpassQuery(query);

@@ -22,9 +22,12 @@ und Trainingsdaten-Auswertung).
   einfließen statt einer reinen Distanz-Heuristik
 - One-Way + Zug in zwei Modi:
   - **Ziel eingeben**: Adresssuche fürs Ziel, danach normale Routenberechnung
-  - **Ziel offen / Vorschläge**: sucht Orte (`place=city/town`) im
-    gewünschten Distanz-Radius, lädt für die besten 3–4 Kandidaten eine
-    Kurzbeschreibung + Bild von Wikipedia und zeigt eine Begründung
+  - **Ziel offen / Vorschläge**: sucht Orte (`place=city/town/village`) im
+    gewünschten Distanz-Radius und rankt sie per Attraktivitäts-Score (siehe
+    unten) statt nach reiner Ortsgröße — auch kleine Dörfer können also
+    vorne landen, wenn sie gut abschneiden. Für die besten 3–4 Kandidaten
+    gibt es eine Kurzbeschreibung + Bild von Wikipedia, eine kleine
+    eingebettete Kartenvorschau mit der Route dorthin, und eine Begründung
     (Distanz, Rückenwind-Ausrichtung, Bahnhof vor Ort)
   - Beide Modi nutzen die NS-API für die Zugrückfahrt-Prüfung zum gewählten Ziel
 - POIs entlang der Route: Tankstelle, Supermarkt, Eisdiele, Café
@@ -77,6 +80,30 @@ fließen die Regler in die bestehende Sektor-/Schritt-Heuristik ein:
   gewichtet; bei "Ziel offen"-Vorschlägen fließt die Windausrichtung
   zusätzlich in die Bewertung der Zielorte ein.
 
+### Attraktivitäts-Score für Zielvorschläge (Modus B)
+
+Statt eines reinen `place=city/town`-Größenfilters fließen in den Score pro
+Kandidat ein:
+
+- **Distanz-Passung** zur Zieldistanz (wie zuvor)
+- **Rückenwind-Ausrichtung** vom Start zum Ort, gewichtet mit dem
+  "Maximaler Rückenwind"-Regler (wie zuvor)
+- **Tourismus/Historie-Dichte**: Anzahl `tourism=*`- und `historic=*`-Tags
+  im Ortskern (900 m Radius), eine Overpass-Abfrage über alle Kandidaten
+  gleichzeitig (je ein eigener Umkreis pro Ort, keine Linien-Suche zwischen
+  ihnen)
+- **Wassernähe**: Abstand zum nächsten Wasser-Feature (gleiche
+  Wasser-Layer-Definition wie bei den Prioritäten-Reglern: `natural=water`
+  und `waterway=*`), als Distanz-Zerfallsfunktion statt fixem Radius
+- **Wikipedia-Bekanntheits-Proxy**: Länge des Artikel-Extracts +
+  Anzahl Sprachversionen (`langlinks`)
+
+Da NL sehr dorfdicht ist, werden vor dieser (teureren) Bewertung zunächst nur
+die 20 distanz-nächsten Kandidaten betrachtet (`PRESCORE_CANDIDATE_CAP` in
+`src/app/api/destinations/route.ts`) — das begrenzt die Overpass-/
+Wikipedia-Anfragen, ohne dass kleine, aber attraktive Orte grundsätzlich
+ausgeschlossen werden.
+
 ### Bekannte Vereinfachungen
 
 - Die Routenauswahl nutzt die Positionen der Knotenpunkte (`rcn_ref`-Nodes),
@@ -93,6 +120,10 @@ fließen die Regler in die bestehende Sektor-/Schritt-Heuristik ein:
 - Zielvorschläge (Modus B) matchen Ortsnamen 1:1 gegen Wikipedia-Titel;
   manche Orte liefern daher keine Beschreibung/Bild (wird als `null`
   behandelt, kein harter Fehler).
+- Die Kartenvorschau auf jeder Vorschlagskarte zeigt eine direkte
+  OSRM-Verbindung Start→Ziel (schnell zu berechnen für 4 Kandidaten
+  parallel), nicht die finale Knotenpunkt-basierte Route — die kann nach
+  Auswahl und tatsächlicher Planung etwas anders verlaufen.
 
 ## Setup
 

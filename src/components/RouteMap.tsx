@@ -10,16 +10,11 @@ import {
   useMapEvents,
   useMap,
 } from "react-leaflet";
-import L from "leaflet";
+import type L from "leaflet";
 import { bearing } from "@/lib/geo";
 import { tailwindColor, tailwindComponent } from "@/lib/wind";
+import { destinationIcon, divIcon } from "@/lib/leafletIcons";
 import type { LatLon, POI, RouteLeg } from "@/lib/types";
-
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "/leaflet/marker-icon-2x.png",
-  iconUrl: "/leaflet/marker-icon.png",
-  shadowUrl: "/leaflet/marker-shadow.png",
-});
 
 const poiIcons: Record<POI["category"], L.DivIcon> = {
   fuel: divIcon("#e11d48", "⛽"),
@@ -27,17 +22,6 @@ const poiIcons: Record<POI["category"], L.DivIcon> = {
   ice_cream: divIcon("#db2777", "🍦"),
   cafe: divIcon("#7c3aed", "☕"),
 };
-
-const destinationIcon = divIcon("#16a34a", "🏁");
-
-function divIcon(color: string, emoji: string): L.DivIcon {
-  return L.divIcon({
-    html: `<div style="background:${color};width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 1px 3px rgba(0,0,0,.4)">${emoji}</div>`,
-    className: "",
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
-  });
-}
 
 function ClickHandler({ onClick }: { onClick: (p: LatLon) => void }) {
   useMapEvents({
