@@ -1,6 +1,7 @@
 "use client";
 
 import PrioritySliders from "./PrioritySliders";
+import type { OneWaySubMode } from "./OneWayTargetPicker";
 import type { POICategory, Priorities, RouteMode } from "@/lib/types";
 
 const POI_OPTIONS: { key: POICategory; label: string }[] = [
@@ -25,6 +26,7 @@ export default function PlannerForm(props: {
   loading: boolean;
   canSubmit: boolean;
   submitHint: string | null;
+  oneWaySubMode?: OneWaySubMode;
 }) {
   const {
     mode,
@@ -41,7 +43,10 @@ export default function PlannerForm(props: {
     loading,
     canSubmit,
     submitHint,
+    oneWaySubMode,
   } = props;
+
+  const isScenicMode = mode === "oneway" && oneWaySubMode === "scenic";
 
   function togglePoi(cat: POICategory) {
     setPoiCategories(
@@ -75,7 +80,13 @@ export default function PlannerForm(props: {
 
       <div>
         <label className="flex justify-between text-sm font-medium mb-1">
-          <span>{mode === "roundtrip" ? "Distanz" : "Such-Distanz für Ziel"}</span>
+          <span>
+            {mode === "roundtrip"
+              ? "Distanz"
+              : isScenicMode
+                ? "Gewünschte Fahrlänge im Korridor"
+                : "Such-Distanz für Ziel"}
+          </span>
           <span>{distanceKm} km</span>
         </label>
         <input
@@ -123,16 +134,24 @@ export default function PlannerForm(props: {
         </div>
       </div>
 
-      <button
-        type="button"
-        disabled={!canSubmit || loading}
-        onClick={onSubmit}
-        className="rounded-md bg-blue-600 text-white py-2.5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {loading ? "Route wird geplant…" : "Route planen"}
-      </button>
-      {!canSubmit && submitHint && (
-        <p className="text-xs text-zinc-500">{submitHint}</p>
+      {isScenicMode ? (
+        <p className="text-xs text-zinc-500">
+          Oben einen Korridor auswählen, um die Route direkt zu planen.
+        </p>
+      ) : (
+        <>
+          <button
+            type="button"
+            disabled={!canSubmit || loading}
+            onClick={onSubmit}
+            className="rounded-md bg-blue-600 text-white py-2.5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? "Route wird geplant…" : "Route planen"}
+          </button>
+          {!canSubmit && submitHint && (
+            <p className="text-xs text-zinc-500">{submitHint}</p>
+          )}
+        </>
       )}
     </div>
   );

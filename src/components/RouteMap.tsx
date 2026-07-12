@@ -13,7 +13,7 @@ import {
 import type L from "leaflet";
 import { bearing } from "@/lib/geo";
 import { tailwindColor, tailwindComponent } from "@/lib/wind";
-import { destinationIcon, divIcon } from "@/lib/leafletIcons";
+import { destinationIcon, divIcon, homeIcon } from "@/lib/leafletIcons";
 import type { LatLon, POI, RouteLeg } from "@/lib/types";
 
 const poiIcons: Record<POI["category"], L.DivIcon> = {
@@ -97,6 +97,7 @@ export default function RouteMap({
   pois,
   wind = null,
   destination = null,
+  homeMarker = null,
 }: {
   start: LatLon | null;
   onSetStart: (p: LatLon) => void;
@@ -104,6 +105,8 @@ export default function RouteMap({
   pois: POI[];
   wind?: { directionDeg: number; speedKmh: number } | null;
   destination?: LatLon | null;
+  /** Shown as a distinct house icon; used in scenic-route mode where `start` is the corridor entry station, not the rider's actual home. */
+  homeMarker?: LatLon | null;
 }) {
   const center = useMemo<[number, number]>(
     () => (start ? [start.lat, start.lon] : [52.09, 5.12]),
@@ -125,6 +128,11 @@ export default function RouteMap({
           </Marker>
         )}
         <LegPolylines legs={legs} wind={wind} />
+        {homeMarker && (
+          <Marker position={[homeMarker.lat, homeMarker.lon]} icon={homeIcon}>
+            <Popup>Zuhause</Popup>
+          </Marker>
+        )}
         {destination && (
           <Marker position={[destination.lat, destination.lon]} icon={destinationIcon}>
             <Popup>Ziel</Popup>

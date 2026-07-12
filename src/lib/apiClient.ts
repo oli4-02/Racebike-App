@@ -6,6 +6,9 @@ import type {
   POI,
   POICategory,
   LatLon,
+  ScenicCorridor,
+  ScenicRoutePlan,
+  TrainInfo,
 } from "./types";
 
 async function parseOrThrow(res: Response) {
@@ -60,17 +63,6 @@ export async function fetchWeatherPreview(
   return parseOrThrow(res);
 }
 
-export type TrainInfo =
-  | { configured: false; message: string }
-  | {
-      configured: true;
-      destStation: { code: string; name: string };
-      homeStation: { code: string; name: string };
-      trips: { departureTime: string; arrivalTime: string; transfers: number }[];
-      ovFiets: { rentalBikesAvailable: number | null };
-    }
-  | { configured: true; error: string };
-
 export async function fetchTrainReturn(params: {
   dest: LatLon;
   home: LatLon;
@@ -97,4 +89,25 @@ export async function fetchDestinationSuggestions(params: {
   });
   const data = await parseOrThrow(res);
   return data.suggestions;
+}
+
+export async function fetchScenicCorridors(): Promise<ScenicCorridor[]> {
+  const res = await fetch("/api/scenic-corridors");
+  const data = await parseOrThrow(res);
+  return data.corridors;
+}
+
+export async function planScenicRoute(params: {
+  corridorId: string;
+  start: LatLon;
+  distanceKm: number;
+  date: string;
+  priorities?: Priorities;
+}): Promise<ScenicRoutePlan> {
+  const res = await fetch("/api/scenic-route", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  return parseOrThrow(res);
 }

@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       configured: true,
-      destStation,
-      homeStation,
+      fromStation: destStation,
+      toStation: homeStation,
       trips,
       ovFiets,
     });

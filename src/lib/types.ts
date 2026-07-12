@@ -98,3 +98,59 @@ export type DestinationSuggestion = {
   /** Decimated direct-OSRM preview route (start -> candidate), for the mini map on the suggestion card. Not the final knooppunt-based route. */
   previewGeometry: LatLon[];
 };
+
+export type StationInfo = {
+  code?: string;
+  name: string;
+  lat: number;
+  lon: number;
+};
+
+export type TrainTrip = {
+  departureTime: string;
+  arrivalTime: string;
+  transfers: number;
+};
+
+/** Result of an NS train lookup for one leg (fromStation -> toStation). */
+export type TrainInfo =
+  | { configured: false; message: string }
+  | { configured: true; error: string }
+  | {
+      configured: true;
+      fromStation: StationInfo;
+      toStation: StationInfo;
+      trips: TrainTrip[];
+      ovFiets: { rentalBikesAvailable: number | null };
+    };
+
+export type LandscapeType =
+  | "duenen_kueste"
+  | "wald"
+  | "polder"
+  | "heide_moor"
+  | "heuvelland"
+  | "fluss_meer";
+
+/** A curated, hand-picked scenic cycling area for the "Landschafts-Route" one-way mode. */
+export type ScenicCorridor = {
+  id: string;
+  name: string;
+  landscapeType: LandscapeType;
+  description: string;
+  /** Approximate center of the corridor area (not a precise polygon). */
+  center: LatLon;
+  /** Approximate radius of the corridor area in km. */
+  radiusKm: number;
+  /** Human-readable nearest station, for display before the real station is resolved via NS. */
+  entryStationName: string;
+};
+
+export type ScenicRoutePlan = {
+  corridor: ScenicCorridor;
+  route: PlannedRoute;
+  entryStation: StationInfo;
+  exitStation: StationInfo;
+  outboundTrain: TrainInfo;
+  returnTrain: TrainInfo;
+};

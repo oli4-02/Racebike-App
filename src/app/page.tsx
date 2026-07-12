@@ -3,11 +3,12 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import AddressSearch from "@/components/AddressSearch";
-import OneWayTargetPicker from "@/components/OneWayTargetPicker";
+import OneWayTargetPicker, { type OneWaySubMode } from "@/components/OneWayTargetPicker";
 import PlannerForm from "@/components/PlannerForm";
 import RouteSummary from "@/components/RouteSummary";
 import TrainReturnPanel from "@/components/TrainReturnPanel";
 import { fetchPois, planRoute } from "@/lib/apiClient";
+import { LANDSCAPE_EMOJI, LANDSCAPE_LABELS } from "@/lib/scenicCorridors";
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type {
   LatLon,
@@ -16,6 +17,7 @@ import type {
   POICategory,
   Priorities,
   RouteMode,
+  ScenicRoutePlan,
 } from "@/lib/types";
 
 const RouteMap = dynamic(() => import("@/components/RouteMap"), {
@@ -45,6 +47,8 @@ export default function Home() {
   ]);
   const [destination, setDestination] = useState<LatLon | null>(null);
   const [destinationLabel, setDestinationLabel] = useState<string | null>(null);
+  const [oneWaySubMode, setOneWaySubMode] = useState<OneWaySubMode>("address");
+  const [scenicPlan, setScenicPlan] = useState<ScenicRoutePlan | null>(null);
 
   const [route, setRoute] = useState<PlannedRoute | null>(null);
   const [pois, setPois] = useState<POI[]>([]);
@@ -57,6 +61,16 @@ export default function Home() {
     : mode === "oneway" && !destination
       ? "Bitte zuerst ein Ziel wählen (Adresse eingeben oder Vorschlag auswählen)."
       : null;
+
+  async function loadPois(geometry: LatLon[]) {
+    if (poiCategories.length === 0) return;
+    try {
+      const p = await fetchPois(geometry, poiCategories);
+      setPois(p);
+    } catch {
+      // POIs are a nice-to-have; a failed lookup shouldn't block the route.
+    }
+  }
 
   async function handleSubmit() {
     if (!start || !canSubmit) return;
@@ -73,15 +87,7 @@ export default function Home() {
         destination: mode === "oneway" ? destination! : undefined,
       });
       setRoute(planned);
-
-      if (poiCategories.length > 0) {
-        try {
-          const p = await fetchPois(planned.geometry, poiCategories);
-          setPois(p);
-        } catch {
-          // POIs are a nice-to-have; a failed lookup shouldn't block the route.
-        }
-      }
+      await loadPois(planned.geometry);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Routenplanung fehlgeschlagen.");
       setRoute(null);
@@ -90,10 +96,34 @@ export default function Home() {
     }
   }
 
+  async function handleScenicRoute(result: ScenicRoutePlan) {
+    setError(null);
+    setDestination(null);
+    setDestinationLabel(null);
+    setScenicPlan(result);
+    setRoute(result.route);
+    setPois([]);
+    await loadPois(result.route.geometry);
+  }
+
   function handleSetMode(next: RouteMode) {
     setMode(next);
     setRoute(null);
+    setScenicPlan(null);
   }
+
+  function handleSetStart(p: LatLon) {
+    setStart(p);
+    setScenicPlan(null);
+  }
+
+  const mapStart = scenicPlan ? scenicPlan.entryStation : start;
+  const mapDestination = scenicPlan
+    ? scenicPlan.exitStation
+    : mode === "oneway"
+      ? destination
+      : null;
+  const mapHomeMarker = scenicPlan ? start : null;
 
   return (
     <div className="flex flex-col md:flex-row flex-1 min-h-0">
@@ -106,7 +136,7 @@ export default function Home() {
           </p>
         </div>
 
-        <AddressSearch onSelect={(p) => setStart(p)} />
+        <AddressSearch onSelect={handleSetStart} />
 
         {mode === "oneway" && start && (
           <OneWayTargetPicker
@@ -117,9 +147,12 @@ export default function Home() {
             destination={destination}
             destinationLabel={destinationLabel}
             onSelectDestination={(p, label) => {
+              setScenicPlan(null);
               setDestination(p);
               setDestinationLabel(label);
             }}
+            onScenicRoute={handleScenicRoute}
+            onSubModeChange={setOneWaySubMode}
           />
         )}
 
@@ -138,6 +171,7 @@ export default function Home() {
           loading={loading}
           canSubmit={canSubmit}
           submitHint={submitHint}
+          oneWaySubMode={mode === "oneway" ? oneWaySubMode : undefined}
         />
 
         {error && (
@@ -146,21 +180,56 @@ export default function Home() {
           </div>
         )}
 
+        {scenicPlan && (
+          <div className="rounded-md border border-zinc-300 dark:border-zinc-700 p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="font-medium">{scenicPlan.corridor.name}</span>
+              <span className="text-xs text-zinc-500">
+                {LANDSCAPE_EMOJI[scenicPlan.corridor.landscapeType]}{" "}
+                {LANDSCAPE_LABELS[scenicPlan.corridor.landscapeType]}
+              </span>
+            </div>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+              {scenicPlan.corridor.description}
+            </p>
+          </div>
+        )}
+
         {route && <RouteSummary route={route} pois={pois} />}
 
-        {route && mode === "oneway" && start && destination && (
+        {scenicPlan && (
+          <>
+            <TrainReturnPanel
+              home={start ?? scenicPlan.entryStation}
+              dest={scenicPlan.entryStation}
+              date={date}
+              title="Hinfahrt (Zuhause → Einstieg)"
+              preloaded={scenicPlan.outboundTrain}
+            />
+            <TrainReturnPanel
+              home={start ?? scenicPlan.entryStation}
+              dest={scenicPlan.exitStation}
+              date={date}
+              title="Rückfahrt (Ausstieg → Zuhause)"
+              preloaded={scenicPlan.returnTrain}
+            />
+          </>
+        )}
+
+        {!scenicPlan && route && mode === "oneway" && start && destination && (
           <TrainReturnPanel home={start} dest={destination} date={date} />
         )}
       </aside>
 
       <main className="order-1 md:order-2 flex-1 h-[50vh] md:h-screen">
         <RouteMap
-          start={start}
-          onSetStart={(p) => setStart(p)}
+          start={mapStart}
+          onSetStart={handleSetStart}
           legs={route?.legs ?? []}
           pois={pois}
           wind={route?.windInfo ?? null}
-          destination={mode === "oneway" ? destination : null}
+          destination={mapDestination}
+          homeMarker={mapHomeMarker}
         />
       </main>
     </div>

@@ -16,3 +16,4 @@ export function divIcon(color: string, emoji: string): L.DivIcon {
 }
 
 export const destinationIcon = divIcon("#16a34a", "🏁");
+export const homeIcon = divIcon("#78716c", "🏠");
