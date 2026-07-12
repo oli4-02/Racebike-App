@@ -36,6 +36,16 @@ und Trainingsdaten-Auswertung).
     dann eine Rad-Route innerhalb des Korridors zu einem passenden Ausstiegsort
     (unter Berücksichtigung der Prioritäten-Regler), dann Zug zurück
   - Alle drei Modi nutzen die NS-API für die Zugverbindungs-Prüfung
+- **Signature-Route** (dritter Tourtyp, neben Rundtour und One-Way + Zug):
+  kuratierte Liste von 19 real existierenden, bekannten NL-Rundtouren
+  (Amstelroute, Amstel Gold Race Loop, Zeeländische-Wind-Route, ...) über
+  5 Provinzen, filterbar nach Landschaftstyp (dieselben Kategorien wie bei
+  "Landschafts-Route"). Liegt der eigene Standort weit von der gewählten
+  Tour entfernt, wird eine Zuganreise zum nächsten Bahnhof der Tourregion
+  vorgeschlagen; liegt er in der Nähe, geht's direkt von dort los. Die
+  Distanz der Originaltour wird beim Auswählen als Ziel-Distanz übernommen,
+  die Feinroute aber dynamisch über Knotenpunkte/OSRM berechnet — kein
+  stures Nachfahren der Original-Wegpunkte
 - POIs entlang der Route: Tankstelle, Supermarkt, Eisdiele, Café
 - GPX-Export (Track + POI-Waypoints) für Garmin Connect / Strava
 - Mobile-first responsives Layout
@@ -56,6 +66,8 @@ API-Keys nicht im Browser offenzulegen):
 | `POST /api/destinations` | Zielvorschläge (Modus B) | Overpass, Wikipedia, NS, Open-Meteo |
 | `GET /api/scenic-corridors` | Statische Korridor-Liste (Landschafts-Route) | – (keine externen Calls) |
 | `POST /api/scenic-route` | Landschafts-Route komplett planen | Overpass, OSRM, NS, Open-Meteo |
+| `GET /api/signature-routes` | Statische Signature-Routen-Liste | – (keine externen Calls) |
+| `POST /api/signature-route` | Signature-Route komplett planen | Overpass, OSRM, NS |
 
 Kernlogik in `src/lib/`:
 - `routePlanner.ts` – wählt Knotenpunkte rund um den Start (Rundtour) bzw.
@@ -69,6 +81,7 @@ Kernlogik in `src/lib/`:
 - `overpass.ts` / `osrm.ts` / `nominatim.ts` / `ns.ts` / `wikipedia.ts` –
   Clients für die externen APIs
 - `scenicCorridors.ts` – die kuratierte Korridor-Liste (Modus "Landschafts-Route")
+- `signatureRoutes.ts` – die kuratierte Liste bekannter NL-Rundtouren (Modus "Signature-Route")
 - `gpx.ts` – GPX-Generierung
 
 ### Wie die Prioritäten-Regler wirken
@@ -140,6 +153,23 @@ eigenen Zuhause, sondern am Korridor selbst:
 4. Zugverbindungen Hin- (Zuhause → Einstieg) und Rückfahrt (Ausstieg →
    Zuhause) werden über die NS-API abgefragt.
 
+### Signature-Route: Ablauf
+
+- Liegt der eigene Startpunkt mehr als 25 km (`FAR_THRESHOLD_M` in
+  `src/app/api/signature-route/route.ts`) vom Zentrum der gewählten Tour
+  entfernt, wird deren nächstgelegener Bahnhof per NS-API aufgelöst und
+  als Anker für die Rundtour verwendet, inkl. Hin- und Rückfahrt-Info
+  (Zuhause ↔ Bahnhof). Andernfalls wird direkt am eigenen Standort
+  angesetzt, ganz ohne Zug.
+- In beiden Fällen läuft die eigentliche Rundtour über dieselbe
+  `planRoute()`-Funktion (Modus Rundtour) wie beim normalen "Rundtour"-Tourtyp
+  — auch hier fließen die Prioritäts-Regler normal ein.
+- Beim Auswählen einer Tour mit bekannter Original-Distanz wird der
+  Distanz-Slider automatisch darauf gesetzt (nicht die exakten
+  Original-Wegpunkte werden nachgefahren, nur die Ziel-Kilometerzahl).
+  Touren ohne dokumentierte Distanz ("variabel" in der Quellliste) behalten
+  den zuletzt eingestellten Slider-Wert.
+
 ### Bekannte Vereinfachungen
 
 - Die Routenauswahl nutzt die Positionen der Knotenpunkte (`rcn_ref`-Nodes),
@@ -170,6 +200,17 @@ eigenen Zuhause, sondern am Korridor selbst:
 - Die Landschafts-Route erfordert keinen Wikipedia-Abgleich (wie gewünscht),
   daher gibt es dort keine Bild-/Text-Vorschau wie bei Modus B, nur Name,
   Landschaftstyp und die kuratierte Kurzbeschreibung.
+- Die Signature-Routen-Liste (`signatureRoutes.ts`) wurde aus einer
+  recherchierten Community-Quellliste (Komoot, Outdooractive, AllTrails,
+  Zeeland.com) transkribiert; Distanzen sind Richtwerte der Originaltouren
+  (Bereichsangaben wurden auf einen Mittelwert reduziert), Start-Koordinaten
+  sind aus den genannten Regionen/Orten grob geschätzt, keine vermessenen
+  Polygone oder exakten Startpunkte.
+- Die Kartenvorschau auf den Signature-Routen-Karten zeigt einen
+  synthetischen Kreis um das Tour-Zentrum (Umfang = Original-Distanz bzw.
+  50 km bei "variabel"), keine echte Route — das würde für 19 Einträge in
+  einer passiv durchsuchbaren Liste 19 zusätzliche Overpass-/OSRM-Aufrufe
+  bedeuten, nur um eine Vorschau zu zeigen.
 
 ## Setup
 

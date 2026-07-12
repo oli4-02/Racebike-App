@@ -154,3 +154,34 @@ export type ScenicRoutePlan = {
   outboundTrain: TrainInfo;
   returnTrain: TrainInfo;
 };
+
+/**
+ * A well-known, real-world NL round-trip cycling route ("Signature-Route"),
+ * curated from community sources (Komoot, Outdooractive, AllTrails,
+ * Zeeland.com). Distances are the original tour's rough length, not a
+ * surveyed target — the app adapts its own loop towards this via the
+ * distance slider rather than replaying the exact original waypoints.
+ */
+export type SignatureRoute = {
+  id: string;
+  name: string;
+  province: string;
+  landscapeType: LandscapeType;
+  description: string;
+  /** Approximate length of the original tour in km; null when sources only said "variabel". */
+  approxDistanceKm: number | null;
+  /** Human-readable start region/town, for display. */
+  startRegionName: string;
+  /** Approximate center of the route's start region (not a precise start point). */
+  center: LatLon;
+};
+
+export type SignatureRoutePlan = {
+  signatureRoute: SignatureRoute;
+  route: PlannedRoute;
+  /** Whether the loop was anchored at a resolved station (user was far from the route) rather than the user's own start. */
+  usedStation: boolean;
+  station: StationInfo | null;
+  outboundTrain: TrainInfo | null;
+  returnTrain: TrainInfo | null;
+};

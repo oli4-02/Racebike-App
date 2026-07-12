@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SCENIC_CORRIDORS } from "@/lib/scenicCorridors";
 import { fetchAreaFeatures, fetchTowns, type AreaFeatures } from "@/lib/overpass";
 import { planRoute } from "@/lib/routePlanner";
-import { findNearestStation, isNsConfigured, ovFietsAvailability, planTrip } from "@/lib/ns";
+import { buildTrainInfo, findNearestStation, isNsConfigured } from "@/lib/ns";
 import { bearing, distance } from "@/lib/geo";
 import {
   fetchWindForecast,
@@ -11,10 +11,7 @@ import {
   tailwindComponent,
 } from "@/lib/wind";
 import { DEFAULT_PRIORITIES } from "@/lib/types";
-import type { LatLon, Priorities, StationInfo, TrainInfo } from "@/lib/types";
-
-const NS_NOT_CONFIGURED_MESSAGE =
-  "Zugverbindung ist noch nicht aktiv: NS_API_KEY fehlt. Kostenlosen Key auf apiportal.ns.nl registrieren und als Umgebungsvariable NS_API_KEY setzen.";
+import type { LatLon, Priorities, StationInfo } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   let body: {
@@ -132,34 +129,6 @@ export async function POST(req: NextRequest) {
       },
       { status: 502 }
     );
-  }
-}
-
-/** Both stations are already resolved (or a display-only fallback lacking a `code`). */
-async function buildTrainInfo(
-  from: StationInfo,
-  to: StationInfo,
-  dateTime: string,
-  nsConfigured: boolean
-): Promise<TrainInfo> {
-  if (!nsConfigured) {
-    return { configured: false, message: NS_NOT_CONFIGURED_MESSAGE };
-  }
-  if (!from.code || !to.code) {
-    return { configured: true, error: "Kein Bahnhof in der Nähe gefunden." };
-  }
-
-  try {
-    const [trips, ovFiets] = await Promise.all([
-      planTrip(from.code, to.code, dateTime),
-      ovFietsAvailability(from.code),
-    ]);
-    return { configured: true, fromStation: from, toStation: to, trips, ovFiets };
-  } catch (err) {
-    return {
-      configured: true,
-      error: err instanceof Error ? err.message : "NS-Abfrage fehlgeschlagen.",
-    };
   }
 }
 

@@ -8,6 +8,8 @@ import type {
   LatLon,
   ScenicCorridor,
   ScenicRoutePlan,
+  SignatureRoute,
+  SignatureRoutePlan,
   TrainInfo,
 } from "./types";
 
@@ -105,6 +107,27 @@ export async function planScenicRoute(params: {
   priorities?: Priorities;
 }): Promise<ScenicRoutePlan> {
   const res = await fetch("/api/scenic-route", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  return parseOrThrow(res);
+}
+
+export async function fetchSignatureRoutes(): Promise<SignatureRoute[]> {
+  const res = await fetch("/api/signature-routes");
+  const data = await parseOrThrow(res);
+  return data.routes;
+}
+
+export async function planSignatureRoute(params: {
+  routeId: string;
+  start: LatLon;
+  distanceKm: number;
+  date: string;
+  priorities?: Priorities;
+}): Promise<SignatureRoutePlan> {
+  const res = await fetch("/api/signature-route", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),

@@ -77,3 +77,23 @@ export function polylineLength(points: LatLon[]): number {
   }
   return total;
 }
+
+/**
+ * Synthesizes a circular loop of the given circumference around a center
+ * point — not a real route, just an illustrative preview of the area and
+ * rough size (used for signature-route cards, where computing an actual
+ * preview route per card would mean an OSRM/Overpass call for every entry
+ * in a passively-browsed list).
+ */
+export function approximateLoopGeometry(
+  center: LatLon,
+  circumferenceKm: number,
+  points = 24
+): LatLon[] {
+  const radiusM = (circumferenceKm * 1000) / (2 * Math.PI);
+  const loop: LatLon[] = [];
+  for (let i = 0; i <= points; i++) {
+    loop.push(destinationPoint(center, (360 * i) / points, radiusM));
+  }
+  return loop;
+}

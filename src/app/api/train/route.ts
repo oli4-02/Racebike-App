@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findNearestStation, isNsConfigured, ovFietsAvailability, planTrip } from "@/lib/ns";
+import {
+  NS_NOT_CONFIGURED_MESSAGE,
+  buildTrainInfo,
+  findNearestStation,
+  isNsConfigured,
+} from "@/lib/ns";
 
 export async function GET(req: NextRequest) {
-  if (!isNsConfigured()) {
-    return NextResponse.json({
-      configured: false,
-      message:
-        "Zugrückfahrt ist noch nicht aktiv: NS_API_KEY fehlt. Kostenlosen Key auf apiportal.ns.nl registrieren und als Umgebungsvariable NS_API_KEY setzen.",
-    });
+  const nsConfigured = isNsConfigured();
+  if (!nsConfigured) {
+    return NextResponse.json({ configured: false, message: NS_NOT_CONFIGURED_MESSAGE });
   }
 
   const params = req.nextUrl.searchParams;
@@ -37,18 +39,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const [trips, ovFiets] = await Promise.all([
-      planTrip(destStation.code, homeStation.code, dateTime),
-      ovFietsAvailability(destStation.code),
-    ]);
-
-    return NextResponse.json({
-      configured: true,
-      fromStation: destStation,
-      toStation: homeStation,
-      trips,
-      ovFiets,
-    });
+    const trainInfo = await buildTrainInfo(destStation, homeStation, dateTime, nsConfigured);
+    return NextResponse.json(trainInfo);
   } catch (err) {
     console.error(err);
     return NextResponse.json(

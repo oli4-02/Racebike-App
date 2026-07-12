@@ -14,9 +14,13 @@ export default function MiniRouteMap({
   destination: LatLon;
   geometry: LatLon[];
 }) {
+  // Bounds from geometry too, not just start/destination: for a loop preview
+  // (signature routes) start and destination are the same point, so bounds
+  // from those alone would collapse to zero area and zoom in on nothing.
   const bounds: [number, number][] = [
     [start.lat, start.lon],
     [destination.lat, destination.lon],
+    ...geometry.map((p): [number, number] => [p.lat, p.lon]),
   ];
 
   return (

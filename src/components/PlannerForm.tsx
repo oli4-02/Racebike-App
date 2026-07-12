@@ -2,7 +2,9 @@
 
 import PrioritySliders from "./PrioritySliders";
 import type { OneWaySubMode } from "./OneWayTargetPicker";
-import type { POICategory, Priorities, RouteMode } from "@/lib/types";
+import type { POICategory, Priorities } from "@/lib/types";
+
+export type AppMode = "roundtrip" | "oneway" | "signature";
 
 const POI_OPTIONS: { key: POICategory; label: string }[] = [
   { key: "fuel", label: "⛽ Tankstelle" },
@@ -12,8 +14,8 @@ const POI_OPTIONS: { key: POICategory; label: string }[] = [
 ];
 
 export default function PlannerForm(props: {
-  mode: RouteMode;
-  setMode: (m: RouteMode) => void;
+  appMode: AppMode;
+  setAppMode: (m: AppMode) => void;
   distanceKm: number;
   setDistanceKm: (v: number) => void;
   date: string;
@@ -29,8 +31,8 @@ export default function PlannerForm(props: {
   oneWaySubMode?: OneWaySubMode;
 }) {
   const {
-    mode,
-    setMode,
+    appMode,
+    setAppMode,
     distanceKm,
     setDistanceKm,
     date,
@@ -46,7 +48,9 @@ export default function PlannerForm(props: {
     oneWaySubMode,
   } = props;
 
-  const isScenicMode = mode === "oneway" && oneWaySubMode === "scenic";
+  const isScenicMode = appMode === "oneway" && oneWaySubMode === "scenic";
+  const isSignatureMode = appMode === "signature";
+  const hidesSubmit = isScenicMode || isSignatureMode;
 
   function togglePoi(cat: POICategory) {
     setPoiCategories(
@@ -63,17 +67,24 @@ export default function PlannerForm(props: {
         <div className="flex rounded-md overflow-hidden border border-zinc-300 dark:border-zinc-700 text-sm">
           <button
             type="button"
-            className={`flex-1 px-3 py-2 ${mode === "roundtrip" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
-            onClick={() => setMode("roundtrip")}
+            className={`flex-1 px-3 py-2 ${appMode === "roundtrip" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
+            onClick={() => setAppMode("roundtrip")}
           >
             Rundtour
           </button>
           <button
             type="button"
-            className={`flex-1 px-3 py-2 ${mode === "oneway" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
-            onClick={() => setMode("oneway")}
+            className={`flex-1 px-3 py-2 ${appMode === "oneway" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
+            onClick={() => setAppMode("oneway")}
           >
             One-Way + Zug
+          </button>
+          <button
+            type="button"
+            className={`flex-1 px-3 py-2 ${appMode === "signature" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900"}`}
+            onClick={() => setAppMode("signature")}
+          >
+            Signature-Route
           </button>
         </div>
       </div>
@@ -81,11 +92,13 @@ export default function PlannerForm(props: {
       <div>
         <label className="flex justify-between text-sm font-medium mb-1">
           <span>
-            {mode === "roundtrip"
+            {appMode === "roundtrip"
               ? "Distanz"
-              : isScenicMode
-                ? "Gewünschte Fahrlänge im Korridor"
-                : "Such-Distanz für Ziel"}
+              : isSignatureMode
+                ? "Ziel-Distanz (wird beim Auswählen ggf. angepasst)"
+                : isScenicMode
+                  ? "Gewünschte Fahrlänge im Korridor"
+                  : "Such-Distanz für Ziel"}
           </span>
           <span>{distanceKm} km</span>
         </label>
@@ -134,9 +147,11 @@ export default function PlannerForm(props: {
         </div>
       </div>
 
-      {isScenicMode ? (
+      {hidesSubmit ? (
         <p className="text-xs text-zinc-500">
-          Oben einen Korridor auswählen, um die Route direkt zu planen.
+          {isSignatureMode
+            ? "Oben eine Signature-Route auswählen, um die Route direkt zu planen."
+            : "Oben einen Korridor auswählen, um die Route direkt zu planen."}
         </p>
       ) : (
         <>

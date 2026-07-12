@@ -1,4 +1,4 @@
-import type { LatLon } from "./types";
+import type { LatLon, StationInfo, TrainInfo } from "./types";
 
 // NS (Nederlandse Spoorwegen) Reisinformatie API — https://apiportal.ns.nl
 // Requires a free subscription key registered by the app owner via
@@ -6,6 +6,9 @@ import type { LatLon } from "./types";
 // not been exercised against a live key yet (see README for setup); treat
 // this module as a best-effort client to verify once a key is available.
 const NS_BASE = "https://gateway.apiportal.ns.nl";
+
+export const NS_NOT_CONFIGURED_MESSAGE =
+  "Zugverbindung ist noch nicht aktiv: NS_API_KEY fehlt. Kostenlosen Key auf apiportal.ns.nl registrieren und als Umgebungsvariable NS_API_KEY setzen.";
 
 export type NsStation = {
   code: string;
@@ -99,3 +102,36 @@ export async function planTrip(
 type NsTrip = {
   legs?: { origin?: { plannedDateTime?: string }; destination?: { plannedDateTime?: string } }[];
 };
+
+/**
+ * Builds a TrainInfo result for one already-resolved leg (from -> to).
+ * Shared by every feature that needs an NS trip lookup (train-return panel,
+ * scenic-route, signature-route) so the not-configured/error shapes stay
+ * consistent everywhere.
+ */
+export async function buildTrainInfo(
+  from: StationInfo,
+  to: StationInfo,
+  dateTime: string,
+  nsConfigured: boolean
+): Promise<TrainInfo> {
+  if (!nsConfigured) {
+    return { configured: false, message: NS_NOT_CONFIGURED_MESSAGE };
+  }
+  if (!from.code || !to.code) {
+    return { configured: true, error: "Kein Bahnhof in der Nähe gefunden." };
+  }
+
+  try {
+    const [trips, ovFiets] = await Promise.all([
+      planTrip(from.code, to.code, dateTime),
+      ovFietsAvailability(from.code),
+    ]);
+    return { configured: true, fromStation: from, toStation: to, trips, ovFiets };
+  } catch (err) {
+    return {
+      configured: true,
+      error: err instanceof Error ? err.message : "NS-Abfrage fehlgeschlagen.",
+    };
+  }
+}
