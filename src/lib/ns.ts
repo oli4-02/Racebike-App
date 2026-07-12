@@ -1,4 +1,4 @@
-import type { AppLocale } from "@/i18n/routing";
+import { routing, type AppLocale } from "@/i18n/routing";
 import { NS_STRINGS } from "./i18nStrings";
 import type { LatLon, StationInfo, TrainInfo } from "./types";
 
@@ -11,7 +11,7 @@ const NS_BASE = "https://gateway.apiportal.ns.nl";
 
 export const NS_NOT_CONFIGURED_MESSAGE = NS_STRINGS.de.notConfigured;
 
-export function nsNotConfiguredMessage(locale: AppLocale = "de"): string {
+export function nsNotConfiguredMessage(locale: AppLocale = routing.defaultLocale): string {
   return NS_STRINGS[locale].notConfigured;
 }
 
@@ -45,7 +45,7 @@ export function isNsConfigured(): boolean {
 
 export async function findNearestStation(
   point: LatLon,
-  locale: AppLocale = "de"
+  locale: AppLocale = routing.defaultLocale
 ): Promise<NsStation | null> {
   const url = `${NS_BASE}/reisinformatie-api/api/v2/stations/nearest?lat=${point.lat}&lng=${point.lon}`;
   const res = await fetch(url, {
@@ -66,7 +66,7 @@ export async function findNearestStation(
 
 export async function ovFietsAvailability(
   stationCode: string,
-  locale: AppLocale = "de"
+  locale: AppLocale = routing.defaultLocale
 ): Promise<OvFietsAvailability> {
   const url = `${NS_BASE}/reisinformatie-api/api/v3/ovfiets/${stationCode}`;
   const res = await fetch(url, {
@@ -89,7 +89,7 @@ export async function planTrip(
   fromStationCode: string,
   toStationCode: string,
   dateTime: string,
-  locale: AppLocale = "de"
+  locale: AppLocale = routing.defaultLocale
 ): Promise<TripSummary[]> {
   const url =
     `${NS_BASE}/reisinformatie-api/api/v3/trips?fromStation=${fromStationCode}` +
@@ -124,7 +124,7 @@ export async function buildTrainInfo(
   to: StationInfo,
   dateTime: string,
   nsConfigured: boolean,
-  locale: AppLocale = "de"
+  locale: AppLocale = routing.defaultLocale
 ): Promise<TrainInfo> {
   if (!nsConfigured) {
     return { configured: false, message: NS_STRINGS[locale].notConfigured };

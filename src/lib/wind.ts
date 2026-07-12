@@ -1,4 +1,4 @@
-import type { AppLocale } from "@/i18n/routing";
+import { routing, type AppLocale } from "@/i18n/routing";
 import { angleDiff, bearing, toRad } from "./geo";
 import { COMPASS_LABELS, WIND_EXPLANATION } from "./i18nStrings";
 import type { LatLon, WindEvaluation, WindForecast } from "./types";
@@ -94,7 +94,7 @@ export function evaluateWindDirection(
   windDirectionDeg: number,
   windSpeedKmh: number,
   tailwindPriority = 1,
-  locale: AppLocale = "de"
+  locale: AppLocale = routing.defaultLocale
 ): WindEvaluation {
   const forwardScore = weightedTailwindScore(legs, windDirectionDeg, tailwindPriority);
   const reversed = [...legs].reverse().map((leg) => ({

@@ -1,4 +1,4 @@
-import type { AppLocale } from "@/i18n/routing";
+import { routing, type AppLocale } from "@/i18n/routing";
 import { OVERPASS_STRINGS, POI_CATEGORY_LABELS } from "./i18nStrings";
 import type { Knooppunt, LatLon, POI, POICategory } from "./types";
 
@@ -73,7 +73,7 @@ function summarizeErrorBody(status: number, statusText: string, body: string, lo
   return `HTTP ${status} ${statusText}${reasons[status] ? ` (${reasons[status]})` : ""}`;
 }
 
-async function runOverpassQuery(query: string, locale: AppLocale = "de"): Promise<OverpassResponse> {
+async function runOverpassQuery(query: string, locale: AppLocale = routing.defaultLocale): Promise<OverpassResponse> {
   const attempts: string[] = [];
   let sawOverloadSignal = false;
 
@@ -116,7 +116,7 @@ async function runOverpassQuery(query: string, locale: AppLocale = "de"): Promis
 export async function fetchKnooppunten(
   center: LatLon,
   radiusM: number,
-  locale: AppLocale = "de"
+  locale: AppLocale = routing.defaultLocale
 ): Promise<Knooppunt[]> {
   const query = `[out:json][timeout:25];
 node["rcn_ref"](around:${radiusM},${center.lat},${center.lon});
@@ -147,7 +147,7 @@ export async function fetchPOIsNearRoute(
   categories: POICategory[],
   corridorM = 400,
   maxPoints = 120,
-  locale: AppLocale = "de"
+  locale: AppLocale = routing.defaultLocale
 ): Promise<POI[]> {
   if (route.length === 0) return [];
 
@@ -205,7 +205,7 @@ export async function fetchAreaFeatures(
   center: LatLon,
   radiusM: number,
   includeAttractions = false,
-  locale: AppLocale = "de"
+  locale: AppLocale = routing.defaultLocale
 ): Promise<AreaFeatures> {
   const around = `around:${radiusM},${center.lat},${center.lon}`;
   const attractionClauses = includeAttractions
@@ -281,7 +281,7 @@ function bucketAreaFeature(
 export async function fetchTourismHistoricPoints(
   centers: LatLon[],
   radiusM: number,
-  locale: AppLocale = "de"
+  locale: AppLocale = routing.defaultLocale
 ): Promise<LatLon[]> {
   if (centers.length === 0) return [];
 
@@ -318,7 +318,7 @@ export type TownCandidate = {
 export async function fetchTowns(
   center: LatLon,
   radiusM: number,
-  locale: AppLocale = "de"
+  locale: AppLocale = routing.defaultLocale
 ): Promise<TownCandidate[]> {
   const query = `[out:json][timeout:25];
 node["place"~"^(city|town|village)$"](around:${radiusM},${center.lat},${center.lon});

@@ -355,8 +355,9 @@ npm run dev
 
 Öffne [http://localhost:3000](http://localhost:3000) für die Landingpage,
 [http://localhost:3000/planner](http://localhost:3000/planner) für den
-Planer direkt. Sprache wechseln über `/en`/`/nl`-Präfix (z. B.
-`/en/planner`) — Deutsch ist Standard ohne Präfix.
+Planer direkt. Sprache wechseln über `/de`/`/en`-Präfix (z. B.
+`/de/planner`) — Niederländisch (`nl`) ist Standard ohne Präfix
+(`defaultLocale` in `src/i18n/routing.ts`).
 
 ### Umgebungsvariablen
 

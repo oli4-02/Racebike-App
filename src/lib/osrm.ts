@@ -1,4 +1,4 @@
-import type { AppLocale } from "@/i18n/routing";
+import { routing, type AppLocale } from "@/i18n/routing";
 import { OSRM_STRINGS } from "./i18nStrings";
 import type { LatLon } from "./types";
 
@@ -23,7 +23,7 @@ export type OsrmLeg = {
 };
 
 /** Routes a single leg between two points, following the paved cycling network. */
-export async function routeLeg(a: LatLon, b: LatLon, locale: AppLocale = "de"): Promise<OsrmLeg> {
+export async function routeLeg(a: LatLon, b: LatLon, locale: AppLocale = routing.defaultLocale): Promise<OsrmLeg> {
   const coords = `${a.lon},${a.lat};${b.lon},${b.lat}`;
   const url = `${OSRM_BASE}/${coords}?overview=full&geometries=geojson&steps=false`;
 
@@ -67,7 +67,7 @@ export async function routeLeg(a: LatLon, b: LatLon, locale: AppLocale = "de"): 
  * reconstructs the per-leg geometry the rest of the app needs for the
  * tailwind-colored polyline segments.
  */
-export async function routeChain(points: LatLon[], locale: AppLocale = "de"): Promise<OsrmLeg[]> {
+export async function routeChain(points: LatLon[], locale: AppLocale = routing.defaultLocale): Promise<OsrmLeg[]> {
   if (points.length < 2) return [];
 
   const coords = points.map((p) => `${p.lon},${p.lat}`).join(";");
