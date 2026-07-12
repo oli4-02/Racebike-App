@@ -42,14 +42,14 @@
       "sub": "Meewind plans your road cycling route across the Netherlands so the wind pushes you instead of slowing you down — plus node-network routes, destination suggestions, curated signature routes, and GPX export for Garmin & Strava.",
       "ctaPrimary": "Plan a route",
       "ctaSecondary": "How it works",
-      "photoAlt": "Road cyclist on a Dutch dike with wind turbines in the background"
+      "photoAlt": "Cyclists on a historic street in Groningen at golden hour"
     },
     "windMoment": {
       "kicker": "THE CENTERPIECE",
       "headline": "WIND-OPTIMIZED. ALWAYS.",
       "body": "Meewind pulls real wind forecasts for your ride day and calculates every route in both directions. Whichever direction gets more tailwind in the harder second third of the ride is the one you ride — automatically, not as a checkbox buried in settings.",
       "example": "Example: wind from the west at 24 km/h — the route is ridden counter-clockwise so the way back gets tailwind instead of a headwind.",
-      "photoAlt": "Wind-swept coastal road in Zeeland"
+      "photoAlt": "Windmills of Kinderdijk at sunset"
     },
     "features": {
       "kicker": "FOUR TOOLS, ONE GOAL",
@@ -58,25 +58,25 @@
           "number": "01",
           "title": "NODE-NETWORK ROUTES",
           "body": "Loop rides along the Dutch cycle node network (fietsknooppunten) — pick a start point and distance, Meewind links the nodes into a full loop.",
-          "photoAlt": "Fietsknooppunt signpost at a junction"
+          "photoAlt": "Paved cycle path through a pine forest"
         },
         {
           "number": "02",
           "title": "DESTINATION SUGGESTIONS",
           "body": "No fixed destination? Meewind suggests worthwhile places within your target distance — with a preview route and an optional train ride home.",
-          "photoAlt": "Historic Dutch town center from above"
+          "photoAlt": "Amsterdam canal at dusk"
         },
         {
           "number": "03",
           "title": "SIGNATURE ROUTES",
           "body": "19 curated routes across the country, from the Amstelroute to the Amstel Gold Race Loop in Zuid-Limburg — well-known tours, re-planned for wind and your priorities.",
-          "photoAlt": "Hilly road cycling route in Zuid-Limburg"
+          "photoAlt": "Dutch village street with flags hung outside houses"
         },
         {
           "number": "04",
           "title": "GPX EXPORT",
           "body": "Every planned route as a GPX file for Garmin, Strava, and Komoot — including cafés, fuel stations, and ice cream stops along the way.",
-          "photoAlt": "Road bike cockpit with a GPS device"
+          "photoAlt": "Tulip field under a blue sky"
         }
       ]
     },

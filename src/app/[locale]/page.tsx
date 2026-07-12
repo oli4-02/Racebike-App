@@ -31,10 +31,10 @@ export default async function LandingPage({
   }[];
 
   const featurePhotos = [
-    "https://source.unsplash.com/1200x900/?bicycle,signpost,netherlands",
-    "https://source.unsplash.com/1200x900/?netherlands,town,aerial",
-    "https://source.unsplash.com/1200x900/?hills,cycling,road",
-    "https://source.unsplash.com/1200x900/?bicycle,gps,cockpit",
+    "/images/feature-forest-bikepath.jpg", // 01 Knotenpunkt-Routen
+    "/images/feature-amsterdam-canal.jpg", // 02 Zielvorschläge
+    "/images/feature-dutch-street.jpg", // 03 Signature-Routen
+    "/images/feature-tulip-field.jpg", // 04 GPX-Export
   ];
 
   return (
@@ -70,7 +70,7 @@ export default async function LandingPage({
               <p className="mb-4 text-sm font-semibold tracking-[0.2em] text-meewind-accent">
                 {tHero("kicker")}
               </p>
-              <h1 className="meewind-display text-4xl leading-[1.05] sm:text-5xl md:text-6xl">
+              <h1 className="meewind-display break-words text-4xl leading-[1.05] sm:text-5xl md:text-6xl">
                 {tHero("headline")}
               </h1>
               <p className="mt-6 max-w-md text-base text-meewind-fg-muted">{tHero("sub")}</p>
@@ -87,7 +87,7 @@ export default async function LandingPage({
               </div>
             </div>
             <PlaceholderPhoto
-              src="https://source.unsplash.com/1200x900/?cycling,dike,netherlands,windmill"
+              src="/images/hero-groningen-cyclists.jpg"
               alt={tHero("photoAlt")}
               className="meewind-clip h-64 w-full md:h-96"
             />
@@ -99,7 +99,7 @@ export default async function LandingPage({
           <div className="mx-auto grid max-w-6xl gap-10 px-6 py-20 text-meewind-accent-fg md:grid-cols-2 md:items-center">
             <div>
               <p className="mb-4 text-sm font-semibold tracking-[0.2em]">{tWind("kicker")}</p>
-              <h2 className="meewind-display text-3xl leading-[1.05] sm:text-4xl md:text-5xl">
+              <h2 className="meewind-display break-words text-3xl leading-[1.05] sm:text-4xl md:text-5xl">
                 {tWind("headline")}
               </h2>
               <p className="mt-6 max-w-md text-base">{tWind("body")}</p>
@@ -108,7 +108,7 @@ export default async function LandingPage({
               </p>
             </div>
             <PlaceholderPhoto
-              src="https://source.unsplash.com/1200x900/?coast,wind,zeeland"
+              src="/images/wind-kinderdijk-windmills.jpg"
               alt={tWind("photoAlt")}
               className="h-64 w-full md:h-96"
             />

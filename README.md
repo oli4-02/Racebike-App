@@ -126,14 +126,15 @@ Windbegründung, kuratierte Listen) zur UI-Sprache passen.
 
 ### Fotos auf der Landingpage
 
-Die "FOTO —"-Platzhalter der Design-Vorlage sind durch royalty-free
-Unsplash-Bilder ersetzt (`src/components/PlaceholderPhoto.tsx`), passend zu
-NL-Rennrad-/Deich-/Küsten-Motiven über Unsplashs Keyword-Redirect-Endpunkt
-(keine feste Foto-ID hinterlegt). Lädt ein Bild nicht, blendet ein
-`onError`-Handler es geräuschlos aus und der Deichgrün-Akzent-Hintergrund
-bleibt sichtbar. Eigene Fotos lassen sich 1:1 einsetzen, indem einfach der
-`src`-Prop pro `<PlaceholderPhoto>`-Aufruf in `src/app/[locale]/page.tsx`
-ersetzt wird.
+Die "FOTO —"-Platzhalter der Design-Vorlage sind durch eigene Fotos ersetzt,
+in `public/images/` (mit `sharp` auf max. 1800px Breite/JPEG q78
+komprimiert, damit das Repo nicht mit unkomprimierten Multi-MB-Originalen
+aufgebläht wird) und per `<PlaceholderPhoto>`
+(`src/components/PlaceholderPhoto.tsx`) in `src/app/[locale]/page.tsx`
+eingebunden. Lädt ein Bild nicht, blendet ein `onError`-Handler es
+geräuschlos aus und der Deichgrün-Akzent-Hintergrund bleibt sichtbar.
+Andere Fotos lassen sich 1:1 einsetzen, indem einfach die `src`-Prop pro
+`<PlaceholderPhoto>`-Aufruf ersetzt wird.
 
 Server-Routen unter `src/app/api/*` (Route Handlers, kein `[locale]`-Präfix)
 dienen als Proxy zu den externen Diensten (nötig um Nominatim/NS-Header bzw.

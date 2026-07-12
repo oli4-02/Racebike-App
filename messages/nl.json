@@ -42,14 +42,14 @@
       "sub": "Meewind plant je racefietsroute door Nederland zo dat de wind je duwt in plaats van afremt — met knooppuntroutes, bestemmingssuggesties, uitgekozen signatuurroutes en GPX-export voor Garmin & Strava.",
       "ctaPrimary": "Route plannen",
       "ctaSecondary": "Hoe het werkt",
-      "photoAlt": "Racefietser op een Nederlandse dijk met windmolens op de achtergrond"
+      "photoAlt": "Fietsers op een historische straat in Groningen tijdens het gouden uur"
     },
     "windMoment": {
       "kicker": "HET HART VAN MEEWIND",
       "headline": "WINDGEOPTIMALISEERD. ALTIJD.",
       "body": "Meewind haalt echte windvoorspellingen op voor jouw rijdag en berekent elke route in beide richtingen. Krijgt een richting meer rugwind in het zwaardere laatste deel van de rit, dan is dat de richting die je fietst — automatisch, niet als vinkje ergens in de instellingen.",
       "example": "Voorbeeld: wind uit het westen, 24 km/u — de route wordt tegen de klok in gereden, zodat de terugweg rugwind krijgt in plaats van tegenwind.",
-      "photoAlt": "Winderige kustweg in Zeeland"
+      "photoAlt": "Molens van Kinderdijk bij zonsondergang"
     },
     "features": {
       "kicker": "VIER FUNCTIES, ÉÉN DOEL",
@@ -58,25 +58,25 @@
           "number": "01",
           "title": "KNOOPPUNTROUTES",
           "body": "Ronde tochten langs het Nederlandse fietsknooppuntennetwerk — kies startpunt en afstand, Meewind verbindt de knooppunten tot een ronde route.",
-          "photoAlt": "Fietsknooppunt-bord bij een kruising"
+          "photoAlt": "Verhard fietspad door een dennenbos"
         },
         {
           "number": "02",
           "title": "BESTEMMINGSSUGGESTIES",
           "body": "Nog geen vast doel? Meewind stelt de moeite waard plekken voor binnen jouw gewenste afstand — met voorbeeldroute en optionele terugreis per trein.",
-          "photoAlt": "Historisch Nederlands stadscentrum van bovenaf"
+          "photoAlt": "Amsterdamse gracht in de avondschemering"
         },
         {
           "number": "03",
           "title": "SIGNATUURROUTES",
           "body": "19 uitgekozen routes door het hele land, van de Amstelroute tot de Amstel Gold Race Loop in Zuid-Limburg — bekende tochten, opnieuw gepland op basis van wind en jouw prioriteiten.",
-          "photoAlt": "Heuvelachtige racefietsroute in Zuid-Limburg"
+          "photoAlt": "Nederlandse dorpsstraat met uitgehangen vlaggen"
         },
         {
           "number": "04",
           "title": "GPX-EXPORT",
           "body": "Elke geplande route als GPX-bestand voor Garmin, Strava en Komoot — inclusief cafés, tankstations en ijssalons onderweg.",
-          "photoAlt": "Racefiets-stuur met gps-toestel"
+          "photoAlt": "Tulpenveld onder een blauwe lucht"
         }
       ]
     },

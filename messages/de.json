@@ -42,14 +42,14 @@
       "sub": "Meewind plant deine Rennradroute in den Niederlanden so, dass der Wind dich schiebt statt bremst — dazu Knotenpunkt-Routen, Zielvorschläge, kuratierte Signature-Routen und GPX-Export für Garmin & Strava.",
       "ctaPrimary": "Route planen",
       "ctaSecondary": "So funktioniert's",
-      "photoAlt": "Rennradfahrer auf einem niederländischen Deich mit Windrädern im Hintergrund"
+      "photoAlt": "Radfahrer auf einer historischen Straße in Groningen im Abendlicht"
     },
     "windMoment": {
       "kicker": "DAS HERZSTÜCK",
       "headline": "WINDOPTIMIERT. IMMER.",
       "body": "Meewind lädt für deinen Fahrtag echte Windvorhersagen und rechnet jede Route in beide Fahrtrichtungen durch. Gewinnt eine Richtung mehr Rückenwind im zweiten, anstrengenderen Streckendrittel, fährst du genau die — automatisch, nicht als Häkchen irgendwo in den Einstellungen.",
       "example": "Beispiel: Wind aus West, 24 km/h — die Route wird gegen den Uhrzeigersinn gefahren, damit die Rückfahrt Rückenwind bekommt statt Gegenwind.",
-      "photoAlt": "Windgepeitschte Küstenstraße in Zeeland"
+      "photoAlt": "Windmühlen von Kinderdijk bei Sonnenuntergang"
     },
     "features": {
       "kicker": "VIER WERKZEUGE, EIN ZIEL",
@@ -58,25 +58,25 @@
           "number": "01",
           "title": "KNOTENPUNKT-ROUTEN",
           "body": "Rundtouren entlang des niederländischen Fietsknooppuntennetzes — Startpunkt und Distanz wählen, Meewind verbindet die Knotenpunkte zu einer runden Strecke.",
-          "photoAlt": "Fietsknooppunt-Wegweiser an einer Kreuzung"
+          "photoAlt": "Asphaltierter Radweg durch einen Kiefernwald"
         },
         {
           "number": "02",
           "title": "ZIELVORSCHLÄGE",
           "body": "Kein festes Ziel? Meewind schlägt lohnende Orte in deiner Wunschdistanz vor — mit Vorschau-Route und Rückfahrt-Option per Bahn.",
-          "photoAlt": "Historisches niederländisches Stadtzentrum von oben"
+          "photoAlt": "Amsterdamer Gracht in der Abenddämmerung"
         },
         {
           "number": "03",
           "title": "SIGNATURE-ROUTEN",
           "body": "19 kuratierte Strecken quer durchs Land, von der Amstelroute bis zur Amstel Gold Race Loop in Zuid-Limburg — bekannte Touren, neu geplant nach Wind und deinen Prioritäten.",
-          "photoAlt": "Hügelige Rennradstrecke in Zuid-Limburg"
+          "photoAlt": "Niederländische Dorfstraße mit gehissten Flaggen"
         },
         {
           "number": "04",
           "title": "GPX-EXPORT",
           "body": "Jede geplante Route als GPX-Datei für Garmin, Strava und Komoot — inklusive Cafés, Tankstellen und Eisdielen entlang der Strecke.",
-          "photoAlt": "Rennrad-Cockpit mit GPS-Gerät"
+          "photoAlt": "Tulpenfeld unter blauem Himmel"
         }
       ]
     },

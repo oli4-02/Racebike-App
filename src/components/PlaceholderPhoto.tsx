@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Unsplash placeholder (royalty-free) via Unsplash's keyword-redirect
- * endpoint, so no specific photo ID is hardcoded. Falls back to a plain
- * Deichgrün-accent panel if the image fails to load, so swapping in the
- * user's own photography later is a one-line `src` change.
+ * Photo slot for the landing page (currently the user's own photos under
+ * public/images/). Falls back to a plain Deichgrün-accent panel if the
+ * image fails to load, so swapping in a different photo later is just a
+ * one-line `src` change.
  */
 export default function PlaceholderPhoto({
   src,
