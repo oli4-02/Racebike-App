@@ -84,6 +84,22 @@ Kernlogik in `src/lib/`:
 - `signatureRoutes.ts` – die kuratierte Liste bekannter NL-Rundtouren (Modus "Signature-Route")
 - `gpx.ts` – GPX-Generierung
 
+### One-Way-Routing: Fortschritt statt reiner Distanz-Heuristik
+
+Für Touren mit festem Ziel (Modus "Ziel eingeben"/"Ziel offen" sowie intern
+bei Landschafts-/Signature-Routen) wird jeder Knotenpunkt-Hop relativ zum
+*zuletzt gewählten* Punkt bestimmt, nicht relativ zum ursprünglichen Start.
+Ein Kandidat wird nur akzeptiert, wenn er (mit kleiner Toleranz für einen
+attraktiven Abstecher) näher am Ziel liegt als der vorherige Hop, zusätzlich
+zu einer Richtungs-Prüfung relativ zum aktuellen Punkt. Ohne diese
+Fortschritts-Prüfung konnte ein späterer Hop geografisch hinter einem
+früheren landen (er passte nur zufällig zur "richtigen Distanz vom
+ursprünglichen Start"), was OSRM beim Verbinden der Punkte in Auswahl-
+Reihenfolge als Schleife/Zickzack auflöste — sichtbar z. B. bei
+Amsterdam→Groningen als Bogen zurück Richtung Almere. Mit synthetischen
+Testdaten verifiziert: eine absichtlich "hinter" platzierte Testroute wird
+auch bei künstlich maximiertem Attraktivitäts-Score nicht mehr gewählt.
+
 ### Wie die Prioritäten-Regler wirken
 
 Es gibt keinen vollständigen gewichteten Shortest-Path über das komplette

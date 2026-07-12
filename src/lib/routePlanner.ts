@@ -160,12 +160,34 @@ function selectRoundTripNodes(
 }
 
 const ONE_WAY_CONE_HALF_WIDTH = 55;
+// How far a hop is allowed to end up farther from the destination than the
+// point it started from, as a fraction of the average hop length -- enough
+// slack for an attractive short detour, not enough to let the route
+// backtrack towards where it came from.
+const ONE_WAY_BACKWARD_TOLERANCE_FRACTION = 0.35;
+
+/** Whether moving from fromPoint to candidate gets meaningfully closer to the destination (within a small tolerance). */
+function isForwardProgress(
+  candidate: LatLon,
+  fromPoint: LatLon,
+  destination: LatLon,
+  toleranceM: number
+): boolean {
+  return distance(candidate, destination) <= distance(fromPoint, destination) + toleranceM;
+}
 
 /**
  * Builds a chain of knooppunten from start towards a fixed destination
- * (Modus A: typed address, or Modus B: a picked suggestion). The detour
- * factor -- how much longer than the straight line the ride is allowed to
- * be -- is itself controlled by the shortestTime priority.
+ * (Modus A: typed address, or Modus B: a picked suggestion), one hop at a
+ * time. Each hop is chosen -- and each candidate filtered -- relative to
+ * wherever the *previous* hop landed, not the original start, and must make
+ * real progress towards the destination (within a small tolerance for a
+ * worthwhile detour). Scoring candidates only by their distance from the
+ * fixed start (as this used to do) let a later hop end up geographically
+ * behind an earlier one, which OSRM then "fixed" by looping back -- the
+ * zigzags reported for Amsterdam→Groningen. The detour factor -- how much
+ * longer than the straight line the ride is allowed to be -- is itself
+ * controlled by the shortestTime priority.
  */
 function selectOneWayNodes(
   start: LatLon,
@@ -174,35 +196,60 @@ function selectOneWayNodes(
   priorities: Priorities,
   featureScores: Map<number, NodeFeatureScores>
 ): { nodes: Knooppunt[]; targetDistanceM: number } {
-  const totalBearing = bearing(start, destination);
   const straightDistanceM = distance(start, destination);
   const detourFactor = 1.15 + 0.3 * (1 - priorities.shortestTime);
   const targetDistanceM = straightDistanceM * detourFactor;
-
-  const scored = scoreNodes(start, pool);
-  const inCone = scored.filter(
-    (n) =>
-      Math.abs(angleDiff(totalBearing, n.bearingFromStart)) <=
-        ONE_WAY_CONE_HALF_WIDTH && n.distFromStart < straightDistanceM * 1.25
-  );
 
   const stepCount = clampNum(
     Math.round((targetDistanceM / 8000) * (1 - 0.25 * priorities.shortestTime)),
     2,
     9
   );
-  const chosen: ScoredNode[] = [];
-  for (let i = 1; i <= stepCount; i++) {
-    const stepTarget = (targetDistanceM * i) / (stepCount + 1);
-    const remaining = inCone.filter((n) => !chosen.includes(n));
-    if (remaining.length === 0) break;
-    remaining.sort(
+  const stepLengthM = targetDistanceM / (stepCount + 1);
+  const toleranceM = stepLengthM * ONE_WAY_BACKWARD_TOLERANCE_FRACTION;
+
+  const chosen: Knooppunt[] = [];
+  const usedIds = new Set<number>();
+  let current: LatLon = start;
+
+  for (let i = 0; i < stepCount; i++) {
+    const candidates = pool
+      .filter((n) => !usedIds.has(n.id))
+      .map((n) => ({
+        node: n,
+        distFromCurrent: distance(current, n),
+        bearingFromCurrent: bearing(current, n),
+      }))
+      .filter(
+        (c) =>
+          isForwardProgress(c.node, current, destination, toleranceM) &&
+          Math.abs(angleDiff(bearing(current, destination), c.bearingFromCurrent)) <=
+            ONE_WAY_CONE_HALF_WIDTH
+      );
+    if (candidates.length === 0) break;
+
+    candidates.sort(
       (a, b) =>
-        scoreCandidate(b, stepTarget, priorities, featureScores) -
-        scoreCandidate(a, stepTarget, priorities, featureScores)
+        scoreCandidate(
+          { ...b.node, distFromStart: b.distFromCurrent, bearingFromStart: b.bearingFromCurrent },
+          stepLengthM,
+          priorities,
+          featureScores
+        ) -
+        scoreCandidate(
+          { ...a.node, distFromStart: a.distFromCurrent, bearingFromStart: a.bearingFromCurrent },
+          stepLengthM,
+          priorities,
+          featureScores
+        )
     );
-    chosen.push(remaining[0]);
+
+    const best = candidates[0].node;
+    chosen.push(best);
+    usedIds.add(best.id);
+    current = best;
   }
+
   return { nodes: chosen, targetDistanceM };
 }
 
@@ -297,17 +344,6 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
   let { osrmLegs, totalDistanceM, totalDurationS } = await reroute(sequence);
 
   const minNodes = req.mode === "roundtrip" ? 2 : 0;
-  const refineIdealDistance =
-    req.mode === "roundtrip"
-      ? targetDistanceM / (2 * Math.PI * 1.3)
-      : targetDistanceM / (nodes.length + 2);
-  const refineBoundsFilter =
-    req.mode === "oneway"
-      ? (n: ScoredNode) =>
-          Math.abs(
-            angleDiff(bearing(req.start, req.destination!), n.bearingFromStart)
-          ) <= ONE_WAY_CONE_HALF_WIDTH
-      : undefined;
 
   for (let iter = 0; iter < MAX_REFINE_ITERATIONS; iter++) {
     const ratio = totalDistanceM / targetDistanceM;
@@ -318,15 +354,40 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
       const dropIndex = indexOfLargestDetour(osrmLegs);
       nodes = nodes.filter((_, i) => i !== dropIndex);
     } else if (ratio < 1 - TOLERANCE) {
-      // Too short: add the best-scoring unused candidate that extends the route.
+      // Too short: add the best-scoring unused candidate that extends the
+      // route. For one-way, the reference point is the last node reached so
+      // far (not the fixed start) and the candidate must still make forward
+      // progress towards the destination -- same reasoning as
+      // selectOneWayNodes, otherwise this refinement step could reintroduce
+      // the exact backtracking it's meant to fix.
+      const refineIdealDistance =
+        req.mode === "roundtrip"
+          ? targetDistanceM / (2 * Math.PI * 1.3)
+          : targetDistanceM / (nodes.length + 2);
+      const referencePoint =
+        req.mode === "oneway" && nodes.length > 0 ? nodes[nodes.length - 1] : req.start;
+      const boundsFilter =
+        req.mode === "oneway"
+          ? (n: ScoredNode) =>
+              isForwardProgress(
+                n,
+                referencePoint,
+                req.destination!,
+                refineIdealDistance * ONE_WAY_BACKWARD_TOLERANCE_FRACTION
+              ) &&
+              Math.abs(
+                angleDiff(bearing(referencePoint, req.destination!), n.bearingFromStart)
+              ) <= ONE_WAY_CONE_HALF_WIDTH
+          : undefined;
+
       const extra = pickExtraNode(
-        req.start,
+        referencePoint,
         pool,
         nodes,
         refineIdealDistance,
         priorities,
         featureScores,
-        refineBoundsFilter
+        boundsFilter
       );
       if (!extra) break;
       nodes = [...nodes, extra];
