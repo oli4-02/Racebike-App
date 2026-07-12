@@ -1,5 +1,10 @@
 import { bearing, distance, angleDiff } from "./geo";
-import { fetchAreaFeatures, fetchKnooppunten, type AreaFeatures } from "./overpass";
+import {
+  fetchAreaFeatures,
+  fetchAttractionPoints,
+  fetchKnooppunten,
+  type AreaFeatures,
+} from "./overpass";
 import { routeChain, type OsrmLeg } from "./osrm";
 import type {
   Knooppunt,
@@ -34,29 +39,51 @@ function scoreNodes(start: LatLon, pool: Knooppunt[]): ScoredNode[] {
 const TRAFFIC_RADIUS_M = 300;
 const NATURE_RADIUS_M = 600;
 const POI_RADIUS_M = 500;
+const ATTRACTION_RADIUS_M = 500;
 
-/** Pre-computes per-node feature scores once so candidate scoring during selection is just a map lookup. */
+/**
+ * Pre-computes per-node feature scores once so candidate scoring during
+ * selection is just a map lookup. Reuses the same attractiveness signals as
+ * the destination-suggestion scoring (/api/destinations): water proximity
+ * (distance decay, not just a density count) and tourism/historic tag
+ * density fold into natureScore/poiScore respectively, so a candidate that
+ * happens to pass right by water or a sight scores higher without changing
+ * which slider controls it.
+ */
 function computeFeatureScores(
   pool: Knooppunt[],
-  features: AreaFeatures
+  features: AreaFeatures,
+  attractionPoints: LatLon[]
 ): Map<number, NodeFeatureScores> {
   const map = new Map<number, NodeFeatureScores>();
   for (const node of pool) {
     const trafficCount = features.trafficPoints.filter(
       (p) => distance(node, p) <= TRAFFIC_RADIUS_M
     ).length;
+    const trafficScore = 1 / (1 + trafficCount);
+
     const natureCount = [...features.waterPoints, ...features.greenPoints].filter(
       (p) => distance(node, p) <= NATURE_RADIUS_M
     ).length;
+    const natureDensityScore = Math.min(1, natureCount / 3);
+    const nearestWaterM =
+      features.waterPoints.length > 0
+        ? Math.min(...features.waterPoints.map((p) => distance(node, p)))
+        : null;
+    const waterProximityScore = nearestWaterM !== null ? 1 / (1 + nearestWaterM / 1000) : 0;
+    const natureScore = (natureDensityScore + waterProximityScore) / 2;
+
     const poiCount = features.poiPoints.filter(
       (p) => distance(node, p) <= POI_RADIUS_M
     ).length;
+    const poiDensityScore = Math.min(1, poiCount / 3);
+    const attractionCount = attractionPoints.filter(
+      (p) => distance(node, p) <= ATTRACTION_RADIUS_M
+    ).length;
+    const attractionScore = Math.min(1, attractionCount / 3);
+    const poiScore = (poiDensityScore + attractionScore) / 2;
 
-    map.set(node.id, {
-      trafficScore: 1 / (1 + trafficCount),
-      natureScore: Math.min(1, natureCount / 3),
-      poiScore: Math.min(1, poiCount / 3),
-    });
+    map.set(node.id, { trafficScore, natureScore, poiScore });
   }
   return map;
 }
@@ -231,9 +258,10 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
       ? clampNum(approxTargetM * 0.45, 3000, 30000)
       : clampNum(approxTargetM * 0.9, 3000, 60000);
 
-  const [pool, areaFeatures] = await Promise.all([
+  const [pool, areaFeatures, attractionPoints] = await Promise.all([
     fetchKnooppunten(req.start, searchRadius),
     fetchAreaFeatures(req.start, searchRadius),
+    fetchAttractionPoints(req.start, searchRadius),
   ]);
 
   if (pool.length < 3) {
@@ -242,7 +270,7 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
     );
   }
 
-  const featureScores = computeFeatureScores(pool, areaFeatures);
+  const featureScores = computeFeatureScores(pool, areaFeatures, attractionPoints);
 
   let nodes: Knooppunt[];
   let targetDistanceM: number;

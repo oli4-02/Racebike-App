@@ -210,6 +210,35 @@ function bucketAreaFeature(
 }
 
 /**
+ * Density of tourism=* / historic=* features within radiusM of a single
+ * center point — used to bias knooppunt selection towards sights along the
+ * way, the same way fetchAreaFeatures already covers traffic/water/green/POI
+ * for that pool. One circle over the whole (comparatively small) search
+ * area, unlike fetchTourismHistoricPoints below which needs one circle per
+ * distant town candidate.
+ */
+export async function fetchAttractionPoints(
+  center: LatLon,
+  radiusM: number
+): Promise<LatLon[]> {
+  const around = `around:${radiusM},${center.lat},${center.lon}`;
+  const query = `[out:json][timeout:25];
+(
+  node["tourism"](${around});
+  way["tourism"](${around});
+  node["historic"](${around});
+  way["historic"](${around});
+);
+out center;`;
+
+  const data = await runOverpassQuery(query);
+  const elements = data.elements ?? [];
+  return elements
+    .map((el) => elementPoint(el))
+    .filter((p): p is LatLon => p !== null);
+}
+
+/**
  * Density of tourism and historic features (OSM tourism=* / historic=* tags)
  * around each of the given town centers ("Ortskern"), used as an
  * attractiveness signal for destination suggestions. One Overpass query

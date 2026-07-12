@@ -78,8 +78,15 @@ Knooppunten-Netz (das wäre ein deutlich größeres Projekt) — stattdessen
 fließen die Regler in die bestehende Sektor-/Schritt-Heuristik ein:
 
 - **Wenig Ampeln**, **viel Natur/Wasser**, **viele Cafés/POIs**: Für jeden
-  Kandidaten-Knotenpunkt wird einmalig ein Overpass-Query über Ampeln/
-  Kreuzungen, Wasser/Wald und Cafés/Eisdielen im Suchradius geladen: Diese
+  Kandidaten-Knotenpunkt werden einmalig Overpass-Querys über Ampeln/
+  Kreuzungen, Wasser/Wald, Cafés/Eisdielen sowie `tourism=*`/`historic=*`-Tags
+  im Suchradius geladen. "Natur/Wasser" kombiniert dabei eine Dichte-Zählung
+  (Wasser+Wald im Umkreis) mit einer Distanz-Zerfallsfunktion zum nächsten
+  Wasser-Feature — dieselbe Formel wie beim Attraktivitäts-Score der
+  Zielvorschläge (siehe unten). "Cafés/POIs" kombiniert analog Café/
+  Eisdielen-Dichte mit Sehenswürdigkeiten-Dichte. So bevorzugt die Route
+  Wasser/Sehenswürdigkeiten in der Nähe, ohne dass die Distanz-Passung (die
+  immer mit Basisgewicht 1 einfließt) dafür einen großen Umweg zulässt — die
   Werte fließen direkt in die Kandidaten-Bewertung pro Sektor/Schritt ein.
 - **Kürzeste Zeit**: erhöht das Gewicht der Distanz-Passung gegenüber den
   anderen Kriterien und reduziert die Anzahl der Zwischenstopps (weniger
