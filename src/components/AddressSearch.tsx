@@ -6,8 +6,12 @@ import type { LatLon } from "@/lib/types";
 
 export default function AddressSearch({
   onSelect,
+  label = "Startadresse",
+  placeholder = "z.B. Utrecht, Domplein",
 }: {
   onSelect: (p: LatLon, label: string) => void;
+  label?: string;
+  placeholder?: string;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeocodeResult[]>([]);
@@ -41,15 +45,13 @@ export default function AddressSearch({
 
   return (
     <div className="relative">
-      <label className="block text-sm font-medium mb-1">
-        Startadresse
-      </label>
+      <label className="block text-sm font-medium mb-1">{label}</label>
       <input
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}
-        placeholder="z.B. Utrecht, Domplein"
+        placeholder={placeholder}
         className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
       />
       {loading && (

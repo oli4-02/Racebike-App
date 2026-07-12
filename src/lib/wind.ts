@@ -63,23 +63,43 @@ function toDegPositive(rad: number): number {
 
 export type WindLeg = { from: LatLon; to: LatLon; distanceM: number };
 
+/** Tailwind component (-1 full headwind..1 full tailwind) for travelling on travelBearing in the given wind. */
+export function tailwindComponent(
+  travelBearingDeg: number,
+  windFromDeg: number
+): number {
+  const windBlowingTowards = (windFromDeg + 180) % 360;
+  return Math.cos(toRad(angleDiff(travelBearingDeg, windBlowingTowards)));
+}
+
+/** Maps a tailwind component (-1..1) to a red(headwind)-yellow(cross)-green(tailwind) CSS color. */
+export function tailwindColor(component: number): string {
+  const clamped = Math.max(-1, Math.min(1, component));
+  const hue = 60 + 60 * clamped; // -1 -> 0 (red), 0 -> 60 (yellow), 1 -> 120 (green)
+  return `hsl(${hue.toFixed(0)}, 75%, 45%)`;
+}
+
 /**
  * Compares riding a leg sequence forward vs. reversed and picks whichever
  * direction gives more tailwind on the second half of the ride (the part
- * where fatigue makes headwind hurt most).
+ * where fatigue makes headwind hurt most). `tailwindPriority` (0..1, from
+ * the user's priority slider) controls how strongly the later section is
+ * weighted: 0 evaluates the whole loop roughly evenly, 1 aggressively
+ * favours a tailwind finish.
  */
 export function evaluateWindDirection(
   legs: WindLeg[],
   windDirectionDeg: number,
-  windSpeedKmh: number
+  windSpeedKmh: number,
+  tailwindPriority = 1
 ): WindEvaluation {
-  const forwardScore = weightedTailwindScore(legs, windDirectionDeg);
+  const forwardScore = weightedTailwindScore(legs, windDirectionDeg, tailwindPriority);
   const reversed = [...legs].reverse().map((leg) => ({
     from: leg.to,
     to: leg.from,
     distanceM: leg.distanceM,
   }));
-  const reverseScore = weightedTailwindScore(reversed, windDirectionDeg);
+  const reverseScore = weightedTailwindScore(reversed, windDirectionDeg, tailwindPriority);
 
   const chosenDirection: "forward" | "reverse" =
     forwardScore >= reverseScore ? "forward" : "reverse";
@@ -101,22 +121,21 @@ export function evaluateWindDirection(
   };
 }
 
-/** Weighted average tailwind component (-1..1), weighting later legs more heavily. */
+/** Weighted average tailwind component (-1..1); intensity controls how much more later legs count. */
 function weightedTailwindScore(
   legs: WindLeg[],
-  windFromDeg: number
+  windFromDeg: number,
+  intensity: number
 ): number {
   if (legs.length === 0) return 0;
-  const windBlowingTowards = (windFromDeg + 180) % 360;
 
   let weightedSum = 0;
   let weightTotal = 0;
   legs.forEach((leg, i) => {
     const travelBearing = bearing(leg.from, leg.to);
-    const component = Math.cos(
-      toRad(angleDiff(travelBearing, windBlowingTowards))
-    );
-    const positionFactor = 1 + (legs.length > 1 ? i / (legs.length - 1) : 0);
+    const component = tailwindComponent(travelBearing, windFromDeg);
+    const positionFactor =
+      1 + (legs.length > 1 ? (i / (legs.length - 1)) * intensity : 0);
     const weight = leg.distanceM * positionFactor;
     weightedSum += component * weight;
     weightTotal += weight;

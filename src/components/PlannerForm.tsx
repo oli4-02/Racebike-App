@@ -1,23 +1,13 @@
 "use client";
 
-import type { POICategory, RouteMode } from "@/lib/types";
+import PrioritySliders from "./PrioritySliders";
+import type { POICategory, Priorities, RouteMode } from "@/lib/types";
 
 const POI_OPTIONS: { key: POICategory; label: string }[] = [
   { key: "fuel", label: "⛽ Tankstelle" },
   { key: "supermarket", label: "🛒 Supermarkt" },
   { key: "ice_cream", label: "🍦 Eisdiele" },
   { key: "cafe", label: "☕ Café" },
-];
-
-const COMPASS_OPTIONS: { deg: number; label: string }[] = [
-  { deg: 0, label: "N" },
-  { deg: 45, label: "NO" },
-  { deg: 90, label: "O" },
-  { deg: 135, label: "SO" },
-  { deg: 180, label: "S" },
-  { deg: 225, label: "SW" },
-  { deg: 270, label: "W" },
-  { deg: 315, label: "NW" },
 ];
 
 export default function PlannerForm(props: {
@@ -27,13 +17,14 @@ export default function PlannerForm(props: {
   setDistanceKm: (v: number) => void;
   date: string;
   setDate: (v: string) => void;
-  bearingDeg: number;
-  setBearingDeg: (v: number) => void;
+  priorities: Priorities;
+  setPriorities: (p: Priorities) => void;
   poiCategories: POICategory[];
   setPoiCategories: (v: POICategory[]) => void;
   onSubmit: () => void;
   loading: boolean;
-  hasStart: boolean;
+  canSubmit: boolean;
+  submitHint: string | null;
 }) {
   const {
     mode,
@@ -42,13 +33,14 @@ export default function PlannerForm(props: {
     setDistanceKm,
     date,
     setDate,
-    bearingDeg,
-    setBearingDeg,
+    priorities,
+    setPriorities,
     poiCategories,
     setPoiCategories,
     onSubmit,
     loading,
-    hasStart,
+    canSubmit,
+    submitHint,
   } = props;
 
   function togglePoi(cat: POICategory) {
@@ -83,7 +75,7 @@ export default function PlannerForm(props: {
 
       <div>
         <label className="flex justify-between text-sm font-medium mb-1">
-          <span>Distanz</span>
+          <span>{mode === "roundtrip" ? "Distanz" : "Such-Distanz für Ziel"}</span>
           <span>{distanceKm} km</span>
         </label>
         <input
@@ -107,27 +99,7 @@ export default function PlannerForm(props: {
         />
       </div>
 
-      {mode === "oneway" && (
-        <div>
-          <span className="block text-sm font-medium mb-1">Grobe Richtung</span>
-          <div className="grid grid-cols-4 gap-1">
-            {COMPASS_OPTIONS.map((c) => (
-              <button
-                key={c.deg}
-                type="button"
-                className={`rounded-md border px-2 py-1 text-xs ${
-                  bearingDeg === c.deg
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "border-zinc-300 dark:border-zinc-700"
-                }`}
-                onClick={() => setBearingDeg(c.deg)}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <PrioritySliders priorities={priorities} setPriorities={setPriorities} />
 
       <div>
         <span className="block text-sm font-medium mb-1">
@@ -153,16 +125,14 @@ export default function PlannerForm(props: {
 
       <button
         type="button"
-        disabled={!hasStart || loading}
+        disabled={!canSubmit || loading}
         onClick={onSubmit}
         className="rounded-md bg-blue-600 text-white py-2.5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? "Route wird geplant…" : "Route planen"}
       </button>
-      {!hasStart && (
-        <p className="text-xs text-zinc-500">
-          Startpunkt per Adresssuche oder Klick auf die Karte wählen.
-        </p>
+      {!canSubmit && submitHint && (
+        <p className="text-xs text-zinc-500">{submitHint}</p>
       )}
     </div>
   );

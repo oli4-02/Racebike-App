@@ -1,6 +1,8 @@
 import type {
+  DestinationSuggestion,
   PlanRequest,
   PlannedRoute,
+  Priorities,
   POI,
   POICategory,
   LatLon,
@@ -80,4 +82,19 @@ export async function fetchTrainReturn(params: {
       `&dateTime=${encodeURIComponent(params.dateTime)}`
   );
   return parseOrThrow(res);
+}
+
+export async function fetchDestinationSuggestions(params: {
+  start: LatLon;
+  distanceKm: number;
+  date: string;
+  priorities?: Priorities;
+}): Promise<DestinationSuggestion[]> {
+  const res = await fetch("/api/destinations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  const data = await parseOrThrow(res);
+  return data.suggestions;
 }

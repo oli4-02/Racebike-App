@@ -3,11 +3,20 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import AddressSearch from "@/components/AddressSearch";
+import OneWayTargetPicker from "@/components/OneWayTargetPicker";
 import PlannerForm from "@/components/PlannerForm";
 import RouteSummary from "@/components/RouteSummary";
 import TrainReturnPanel from "@/components/TrainReturnPanel";
 import { fetchPois, planRoute } from "@/lib/apiClient";
-import type { LatLon, PlannedRoute, POI, POICategory, RouteMode } from "@/lib/types";
+import { DEFAULT_PRIORITIES } from "@/lib/types";
+import type {
+  LatLon,
+  PlannedRoute,
+  POI,
+  POICategory,
+  Priorities,
+  RouteMode,
+} from "@/lib/types";
 
 const RouteMap = dynamic(() => import("@/components/RouteMap"), {
   ssr: false,
@@ -27,21 +36,30 @@ export default function Home() {
   const [mode, setMode] = useState<RouteMode>("roundtrip");
   const [distanceKm, setDistanceKm] = useState(60);
   const [date, setDate] = useState(today());
-  const [bearingDeg, setBearingDeg] = useState(90);
+  const [priorities, setPriorities] = useState<Priorities>(DEFAULT_PRIORITIES);
   const [poiCategories, setPoiCategories] = useState<POICategory[]>([
     "fuel",
     "supermarket",
     "ice_cream",
     "cafe",
   ]);
+  const [destination, setDestination] = useState<LatLon | null>(null);
+  const [destinationLabel, setDestinationLabel] = useState<string | null>(null);
 
   const [route, setRoute] = useState<PlannedRoute | null>(null);
   const [pois, setPois] = useState<POI[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const canSubmit = Boolean(start) && (mode === "roundtrip" || Boolean(destination));
+  const submitHint = !start
+    ? "Startpunkt per Adresssuche oder Klick auf die Karte wählen."
+    : mode === "oneway" && !destination
+      ? "Bitte zuerst ein Ziel wählen (Adresse eingeben oder Vorschlag auswählen)."
+      : null;
+
   async function handleSubmit() {
-    if (!start) return;
+    if (!start || !canSubmit) return;
     setLoading(true);
     setError(null);
     setPois([]);
@@ -51,7 +69,8 @@ export default function Home() {
         mode,
         distanceKm,
         date,
-        bearingDeg: mode === "oneway" ? bearingDeg : undefined,
+        priorities,
+        destination: mode === "oneway" ? destination! : undefined,
       });
       setRoute(planned);
 
@@ -71,8 +90,10 @@ export default function Home() {
     }
   }
 
-  const destination =
-    route && route.mode === "oneway" ? route.geometry[route.geometry.length - 1] : null;
+  function handleSetMode(next: RouteMode) {
+    setMode(next);
+    setRoute(null);
+  }
 
   return (
     <div className="flex flex-col md:flex-row flex-1 min-h-0">
@@ -87,20 +108,36 @@ export default function Home() {
 
         <AddressSearch onSelect={(p) => setStart(p)} />
 
+        {mode === "oneway" && start && (
+          <OneWayTargetPicker
+            start={start}
+            distanceKm={distanceKm}
+            date={date}
+            priorities={priorities}
+            destination={destination}
+            destinationLabel={destinationLabel}
+            onSelectDestination={(p, label) => {
+              setDestination(p);
+              setDestinationLabel(label);
+            }}
+          />
+        )}
+
         <PlannerForm
           mode={mode}
-          setMode={setMode}
+          setMode={handleSetMode}
           distanceKm={distanceKm}
           setDistanceKm={setDistanceKm}
           date={date}
           setDate={setDate}
-          bearingDeg={bearingDeg}
-          setBearingDeg={setBearingDeg}
+          priorities={priorities}
+          setPriorities={setPriorities}
           poiCategories={poiCategories}
           setPoiCategories={setPoiCategories}
           onSubmit={handleSubmit}
           loading={loading}
-          hasStart={Boolean(start)}
+          canSubmit={canSubmit}
+          submitHint={submitHint}
         />
 
         {error && (
@@ -120,8 +157,10 @@ export default function Home() {
         <RouteMap
           start={start}
           onSetStart={(p) => setStart(p)}
-          geometry={route?.geometry ?? []}
+          legs={route?.legs ?? []}
           pois={pois}
+          wind={route?.windInfo ?? null}
+          destination={mode === "oneway" ? destination : null}
         />
       </main>
     </div>
