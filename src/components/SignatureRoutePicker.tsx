@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { fetchSignatureRoutes, planSignatureRoute } from "@/lib/apiClient";
-import { approximateLoopGeometry } from "@/lib/geo";
+import { approximateLoopGeometry, distance } from "@/lib/geo";
 import { LANDSCAPE_EMOJI, LANDSCAPE_LABELS } from "@/lib/scenicCorridors";
 import type {
   LandscapeType,
@@ -22,6 +22,8 @@ const MiniRouteMap = dynamic(() => import("./MiniRouteMap"), {
 
 const LANDSCAPE_TYPES = Object.keys(LANDSCAPE_LABELS) as LandscapeType[];
 const DEFAULT_PREVIEW_KM = 50;
+// Mirrors FAR_THRESHOLD_M in /api/signature-route/route.ts, just for the "Zug-Anreise" hint below.
+const FAR_THRESHOLD_KM = 25;
 
 export default function SignatureRoutePicker({
   start,
@@ -76,7 +78,13 @@ export default function SignatureRoutePicker({
     }
   }
 
-  const visible = filter ? routes.filter((r) => r.landscapeType === filter) : routes;
+  const withDistance = routes.map((r) => ({
+    ...r,
+    distFromStartKm: distance(start, r.center) / 1000,
+  }));
+  const visible = (filter ? withDistance.filter((r) => r.landscapeType === filter) : withDistance).sort(
+    (a, b) => a.distFromStartKm - b.distFromStartKm
+  );
 
   return (
     <div className="flex flex-col gap-2">
@@ -135,6 +143,12 @@ export default function SignatureRoutePicker({
               <p className="text-xs text-zinc-500">
                 {r.province} · {r.startRegionName} ·{" "}
                 {r.approxDistanceKm ? `≈ ${r.approxDistanceKm} km` : "variable Distanz"}
+              </p>
+              <p className="text-xs text-zinc-500">
+                {r.distFromStartKm.toFixed(0)} km von deinem Standort ·{" "}
+                {r.distFromStartKm > FAR_THRESHOLD_KM
+                  ? "Zug-Anreise wird vorgeschlagen"
+                  : "direkt losfahren"}
               </p>
               <p className="text-xs text-zinc-600 dark:text-zinc-400">{r.description}</p>
               <button

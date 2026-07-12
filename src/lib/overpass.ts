@@ -39,36 +39,82 @@ function elementPoint(el: OverpassElement): LatLon | null {
   return null;
 }
 
+// 429 means the free instance is throttling us and is worth one short-delay
+// retry (its rate limits typically refill within a couple seconds). 502/503/504
+// mean the query itself is slow or the server is overloaded — retrying the
+// same endpoint right away rarely helps and just adds latency, so those fall
+// straight through to the next mirror instead.
+const RETRY_STATUS = 429;
+const MAX_ATTEMPTS_PER_ENDPOINT = 2;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(res: Response): number {
+  const retryAfter = Number(res.headers.get("Retry-After"));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) {
+    return Math.min(retryAfter * 1000, 5000);
+  }
+  return 2000;
+}
+
+/** Overpass error pages are full HTML documents; showing that raw is just noise for users. */
+function summarizeErrorBody(status: number, statusText: string, body: string): string {
+  const looksLikeHtml = body.trimStart().startsWith("<");
+  if (!looksLikeHtml) {
+    const snippet = body.trim().slice(0, 300);
+    return snippet ? `HTTP ${status} ${statusText}: ${snippet}` : `HTTP ${status} ${statusText}`;
+  }
+
+  const reasons: Record<number, string> = {
+    429: "Rate-Limit erreicht (zu viele Anfragen)",
+    502: "Bad Gateway",
+    503: "Dienst überlastet",
+    504: "Gateway Timeout — Anfrage war dem Server zu komplex oder er ist überlastet",
+  };
+  return `HTTP ${status} ${statusText}${reasons[status] ? ` (${reasons[status]})` : ""}`;
+}
+
 async function runOverpassQuery(query: string): Promise<OverpassResponse> {
   const attempts: string[] = [];
+  let sawOverloadSignal = false;
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: OVERPASS_HEADERS,
-        body: "data=" + encodeURIComponent(query),
-        signal: AbortSignal.timeout(30000),
-      });
-      if (!res.ok) {
-        const bodySnippet = (await res.text().catch(() => "")).slice(0, 300);
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_ENDPOINT; attempt++) {
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: OVERPASS_HEADERS,
+          body: "data=" + encodeURIComponent(query),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!res.ok) {
+          sawOverloadSignal = true;
+          const bodyText = await res.text().catch(() => "");
+          attempts.push(`${endpoint} -> ${summarizeErrorBody(res.status, res.statusText, bodyText)}`);
+
+          if (res.status === RETRY_STATUS && attempt < MAX_ATTEMPTS_PER_ENDPOINT) {
+            await sleep(retryDelayMs(res));
+            continue;
+          }
+          break;
+        }
+        return await res.json();
+      } catch (err) {
         attempts.push(
-          `${endpoint} -> HTTP ${res.status} ${res.statusText}${
-            bodySnippet ? `: ${bodySnippet}` : ""
-          }`
+          `${endpoint} -> ${err instanceof Error ? err.message : String(err)}`
         );
-        continue;
+        break;
       }
-      return await res.json();
-    } catch (err) {
-      attempts.push(
-        `${endpoint} -> ${err instanceof Error ? err.message : String(err)}`
-      );
     }
   }
 
+  const hint = sawOverloadSignal
+    ? "\n\nDer öffentliche Overpass-Dienst ist gerade überlastet oder limitiert Anfragen. Bitte in ein paar Sekunden erneut versuchen."
+    : "";
   throw new Error(
-    `Overpass-Anfrage an allen Servern fehlgeschlagen:\n${attempts.join("\n")}`
+    `Overpass-Anfrage an allen Servern fehlgeschlagen:\n${attempts.join("\n")}${hint}`
   );
 }
 
@@ -143,6 +189,7 @@ export type AreaFeatures = {
   waterPoints: LatLon[];
   greenPoints: LatLon[];
   poiPoints: LatLon[];
+  attractionPoints: LatLon[];
 };
 
 /**
@@ -151,12 +198,26 @@ export type AreaFeatures = {
  * (more nearby = better), and cafes/ice cream (more nearby = better). One
  * Overpass round-trip instead of four, using `out center` so way/relation
  * results (water bodies, forests) also come back as a single point.
+ *
+ * `includeAttractions` folds the tourism/historic tag query in too (used by
+ * routePlanner, whose search radius is small enough that this stays cheap)
+ * instead of a separate request — callers that don't need it (destinations,
+ * scenic-route, which search much larger areas) leave it off so their query
+ * doesn't grow for data they'd throw away anyway.
  */
 export async function fetchAreaFeatures(
   center: LatLon,
-  radiusM: number
+  radiusM: number,
+  includeAttractions = false
 ): Promise<AreaFeatures> {
   const around = `around:${radiusM},${center.lat},${center.lon}`;
+  const attractionClauses = includeAttractions
+    ? `
+  node["tourism"](${around});
+  way["tourism"](${around});
+  node["historic"](${around});
+  way["historic"](${around});`
+    : "";
   const query = `[out:json][timeout:25];
 (
   node["highway"~"^(traffic_signals|crossing)$"](${around});
@@ -167,7 +228,7 @@ export async function fetchAreaFeatures(
   way["landuse"~"^(forest|wood)$"](${around});
   node["amenity"="cafe"](${around});
   node["amenity"="ice_cream"](${around});
-  node["shop"="ice_cream"](${around});
+  node["shop"="ice_cream"](${around});${attractionClauses}
 );
 out center;`;
 
@@ -179,6 +240,7 @@ out center;`;
     waterPoints: [],
     greenPoints: [],
     poiPoints: [],
+    attractionPoints: [],
   };
   for (const el of elements) {
     const point = elementPoint(el);
@@ -188,13 +250,14 @@ out center;`;
     else if (bucket === "water") features.waterPoints.push(point);
     else if (bucket === "green") features.greenPoints.push(point);
     else if (bucket === "poi") features.poiPoints.push(point);
+    else if (bucket === "attraction") features.attractionPoints.push(point);
   }
   return features;
 }
 
 function bucketAreaFeature(
   tags: Record<string, string>
-): "traffic" | "water" | "green" | "poi" | null {
+): "traffic" | "water" | "green" | "poi" | "attraction" | null {
   if (tags.highway === "traffic_signals" || tags.highway === "crossing")
     return "traffic";
   if (tags.natural === "water" || tags.waterway) return "water";
@@ -206,36 +269,8 @@ function bucketAreaFeature(
     return "green";
   if (tags.amenity === "cafe" || tags.amenity === "ice_cream" || tags.shop === "ice_cream")
     return "poi";
+  if (tags.tourism || tags.historic) return "attraction";
   return null;
-}
-
-/**
- * Density of tourism=* / historic=* features within radiusM of a single
- * center point — used to bias knooppunt selection towards sights along the
- * way, the same way fetchAreaFeatures already covers traffic/water/green/POI
- * for that pool. One circle over the whole (comparatively small) search
- * area, unlike fetchTourismHistoricPoints below which needs one circle per
- * distant town candidate.
- */
-export async function fetchAttractionPoints(
-  center: LatLon,
-  radiusM: number
-): Promise<LatLon[]> {
-  const around = `around:${radiusM},${center.lat},${center.lon}`;
-  const query = `[out:json][timeout:25];
-(
-  node["tourism"](${around});
-  way["tourism"](${around});
-  node["historic"](${around});
-  way["historic"](${around});
-);
-out center;`;
-
-  const data = await runOverpassQuery(query);
-  const elements = data.elements ?? [];
-  return elements
-    .map((el) => elementPoint(el))
-    .filter((p): p is LatLon => p !== null);
 }
 
 /**

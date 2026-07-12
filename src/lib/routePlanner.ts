@@ -1,10 +1,5 @@
 import { bearing, distance, angleDiff } from "./geo";
-import {
-  fetchAreaFeatures,
-  fetchAttractionPoints,
-  fetchKnooppunten,
-  type AreaFeatures,
-} from "./overpass";
+import { fetchAreaFeatures, fetchKnooppunten, type AreaFeatures } from "./overpass";
 import { routeChain, type OsrmLeg } from "./osrm";
 import type {
   Knooppunt,
@@ -52,8 +47,7 @@ const ATTRACTION_RADIUS_M = 500;
  */
 function computeFeatureScores(
   pool: Knooppunt[],
-  features: AreaFeatures,
-  attractionPoints: LatLon[]
+  features: AreaFeatures
 ): Map<number, NodeFeatureScores> {
   const map = new Map<number, NodeFeatureScores>();
   for (const node of pool) {
@@ -77,7 +71,7 @@ function computeFeatureScores(
       (p) => distance(node, p) <= POI_RADIUS_M
     ).length;
     const poiDensityScore = Math.min(1, poiCount / 3);
-    const attractionCount = attractionPoints.filter(
+    const attractionCount = features.attractionPoints.filter(
       (p) => distance(node, p) <= ATTRACTION_RADIUS_M
     ).length;
     const attractionScore = Math.min(1, attractionCount / 3);
@@ -258,10 +252,9 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
       ? clampNum(approxTargetM * 0.45, 3000, 30000)
       : clampNum(approxTargetM * 0.9, 3000, 60000);
 
-  const [pool, areaFeatures, attractionPoints] = await Promise.all([
+  const [pool, areaFeatures] = await Promise.all([
     fetchKnooppunten(req.start, searchRadius),
-    fetchAreaFeatures(req.start, searchRadius),
-    fetchAttractionPoints(req.start, searchRadius),
+    fetchAreaFeatures(req.start, searchRadius, true),
   ]);
 
   if (pool.length < 3) {
@@ -270,7 +263,7 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
     );
   }
 
-  const featureScores = computeFeatureScores(pool, areaFeatures, attractionPoints);
+  const featureScores = computeFeatureScores(pool, areaFeatures);
 
   let nodes: Knooppunt[];
   let targetDistanceM: number;

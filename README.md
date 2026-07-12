@@ -155,6 +155,11 @@ eigenen Zuhause, sondern am Korridor selbst:
 
 ### Signature-Route: Ablauf
 
+- Die Liste im Frontend wird nach Entfernung des eigenen Startpunkts zum
+  Tour-Zentrum sortiert (nächste zuerst) und zeigt pro Karte die Distanz
+  sowie einen Hinweis, ob direkt losgefahren wird oder eine Zug-Anreise
+  vorgeschlagen wird — alle 19 Touren bleiben wählbar, aber es ist auf den
+  ersten Blick klar, welche in der Nähe liegen.
 - Liegt der eigene Startpunkt mehr als 25 km (`FAR_THRESHOLD_M` in
   `src/app/api/signature-route/route.ts`) vom Zentrum der gewählten Tour
   entfernt, wird deren nächstgelegener Bahnhof per NS-API aufgelöst und
@@ -239,6 +244,32 @@ NS_API_KEY=
   Endpunkte/Feldnamen dort verifizieren.
 
 Overpass, OSRM und Open-Meteo benötigen keine Keys.
+
+### Umgang mit Overpass-Überlastung (429/502/503/504)
+
+Der öffentliche Overpass-Dienst (overpass-api.de, lz4.overpass-api.de) ist
+ein geteilter Community-Server ohne SLA und reagiert bei hoher Last mit
+429 (Rate-Limit) oder 502/503/504 (überlastet/Gateway-Timeout). `runOverpassQuery`
+in `src/lib/overpass.ts` geht damit so um:
+
+- Bei 429 wird einmal mit kurzer Wartezeit (Retry-After-Header oder 2s
+  Standard) auf demselben Server erneut versucht, bevor zum zweiten Mirror
+  gewechselt wird — Rate-Limits erholen sich meist innerhalb weniger Sekunden.
+- Bei 502/503/504 wird sofort zum nächsten Mirror gewechselt statt erneut zu
+  versuchen, da eine überlastete/zu komplexe Anfrage durch sofortiges
+  Wiederholen selten schneller wird.
+- Fehlermeldungen zeigen nicht mehr die rohe HTML-Fehlerseite an (nur
+  störender Markup-Müll), sondern eine kurze Status-Erklärung, plus einen
+  Hinweis "Bitte in ein paar Sekunden erneut versuchen", wenn alle Fehler auf
+  Überlastung hindeuten.
+- `routePlanner.ts` fasst die Overpass-Abfragen für Knotenpunkte-Auswahl
+  (Ampeln/Wasser/Wald/Cafés + Sehenswürdigkeiten) in zwei statt drei
+  Anfragen zusammen (`fetchAreaFeatures(..., includeAttractions=true)`), um
+  die Serverlast pro Routenplanung zu reduzieren.
+
+Das sind Abmilderungen, keine Garantie — bei anhaltender Überlastung des
+öffentlichen Dienstes hilft nur Warten oder ein eigener (selbst gehosteter
+oder kommerzieller) Overpass-Endpunkt.
 
 ### Hinweis zur Entwicklungsumgebung
 
