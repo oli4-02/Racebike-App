@@ -25,6 +25,13 @@ darum herum.
 - Prioritäten-Regler (wenig Ampeln, viel Natur/Wasser, viele Cafés/POIs,
   kürzeste Zeit, maximaler Rückenwind), die in die Knotenpunkt-Auswahl
   einfließen statt einer reinen Distanz-Heuristik
+- **Richtung** (Rundtour): optionale Kompass-Richtung (N/NO/O/SO/S/SW/W/NW),
+  um gezielt aufs Land hinauszufahren statt immer rund um den Startpunkt zu
+  kreisen (siehe "Direction-biased Rundtouren" unten)
+- **5 Routen-Varianten** (Rundtour): auf Wunsch werden statt einer einzelnen
+  Route gleich 5 unterschiedliche Vorschläge berechnet (verschiedene
+  Richtungen bzw. Streuung um die gewählte Richtung) und als Kartenvorschau
+  + Distanz/Zeit zur Auswahl angezeigt
 - One-Way + Zug in zwei Modi:
   - **Ziel eingeben**: Adresssuche fürs Ziel, danach normale Routenberechnung
   - **Ziel offen / Vorschläge**: sucht Orte (`place=city/town/village`) im
@@ -176,6 +183,28 @@ Amsterdam→Groningen als Bogen zurück Richtung Almere. Mit synthetischen
 Testdaten verifiziert: eine absichtlich "hinter" platzierte Testroute wird
 auch bei künstlich maximiertem Attraktivitäts-Score nicht mehr gewählt.
 
+### Direction-biased Rundtouren & 5 Routen-Varianten
+
+Ohne gewählte Richtung verteilt `selectRoundTripNodes` (in `routePlanner.ts`)
+einen Knotenpunkt pro Bearing-Sektor über den vollen 360°-Kreis um den Start
+— das liefert zuverlässig eine geschlossene Schleife, liest sich bei
+Startpunkten in/nahe einer Großstadt (z. B. Amsterdam) aber wie "im Kreis um
+die Stadt fahren" statt "irgendwohin fahren". Mit gewählter Richtung wird
+stattdessen nur ein ±75°-Kegel um die gewählte Kompass-Richtung betrachtet
+und der Ziel-Radius für eine Hin-und-zurück-Form berechnet (deutlich weiter
+draußen als beim Vollkreis-Radius derselben Distanz) — die Route fährt
+spürbar in eine Richtung hinaus und schleift sich am Ende wieder zurück,
+statt eng um den Start zu kreisen.
+
+`planRoundTripAlternatives()` nutzt denselben Knotenpunkt-Pool/Feature-Fetch
+(ein Overpass-Roundtrip statt fünf) und berechnet parallel (mit begrenzter
+Nebenläufigkeit, um den öffentlichen OSRM-Dienst nicht zu überlasten) fünf
+Varianten: ohne gewählte Richtung fünf gleichmäßig über den Kompass verteilte
+Richtungen, mit gewählter Richtung fünf leicht gestreute Varianten um sie
+herum (±30°). `/api/plan-alternatives` liefert sie mit Distanz/Zeit und
+Kartenvorschau an `RouteAlternativesPicker` im Frontend, wo eine davon direkt
+übernommen werden kann.
+
 ### Wie die Prioritäten-Regler wirken
 
 Es gibt keinen vollständigen gewichteten Shortest-Path über das komplette
@@ -224,6 +253,14 @@ die 20 distanz-nächsten Kandidaten betrachtet (`PRESCORE_CANDIDATE_CAP` in
 `src/app/api/destinations/route.ts`) — das begrenzt die Overpass-/
 Wikipedia-Anfragen, ohne dass kleine, aber attraktive Orte grundsätzlich
 ausgeschlossen werden.
+
+Das Akzeptanzfenster um die Zieldistanz ist ein absoluter Toleranzwert
+(±15 km), kein Prozentsatz der Zieldistanz — ein Prozentsatz wird bei langen
+Touren unnötig breit und bei kurzen unnötig eng, und in Gegenden mit dünner
+`place=town/village`-Taggierung kann er komplett leer bleiben, obwohl
+brauchbare Orte nur knapp außerhalb liegen. Findet sich bei ±15 km nichts,
+weitet `DISTANCE_TOLERANCE_STEPS_M` das Fenster schrittweise auf ±25 km,
+dann ±40 km, statt einfach eine leere Liste zurückzugeben.
 
 ### Landschafts-Route: Ablauf
 
@@ -365,6 +402,19 @@ in `src/lib/overpass.ts` geht damit so um:
 Das sind Abmilderungen, keine Garantie — bei anhaltender Überlastung des
 öffentlichen Dienstes hilft nur Warten oder ein eigener (selbst gehosteter
 oder kommerzieller) Overpass-Endpunkt.
+
+### Performance: ein OSRM-Request statt vieler pro Route
+
+`routeChain()` in `src/lib/osrm.ts` schickte früher pro Etappe eine eigene,
+sequenzielle OSRM-Anfrage (`for`-Schleife mit `await` pro Hop) — bei 6–10
+Knotenpunkten plus bis zu drei weiteren vollständigen Neu-Routings im
+Distanz-Verfeinerungs-Loop in `planRoute()` (`finalizeRoute()`) lief das auf
+20–40+ sequenzielle HTTP-Requests pro Routenplanung hinaus und war der
+Hauptgrund für lange Wartezeiten. OSRMs Route-Service akzeptiert beliebig
+viele Wegpunkte in einem einzigen Request (`steps=true` liefert dabei pro
+Etappe Distanz/Zeit sowie die Turn-by-turn-Geometrie, aus der die
+Etappen-Geometrie fürs Rückenwind-Einfärben der Karte zusammengesetzt wird)
+— jetzt reicht ein Request pro Verfeinerungs-Durchlauf.
 
 ### Hinweis zur Entwicklungsumgebung
 

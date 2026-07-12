@@ -130,6 +130,19 @@
       "poiSupermarket": "🛒 Supermarkt",
       "poiIceCream": "🍦 IJssalon",
       "poiCafe": "☕ Café",
+      "direction": "Richting",
+      "directionHint": "Kies een richting om echt het land in te fietsen in plaats van rondjes rond het startpunt.",
+      "directions": {
+        "any": "Maakt niet uit (rondje bij start)",
+        "n": "Noord",
+        "ne": "Noordoost",
+        "e": "Oost",
+        "se": "Zuidoost",
+        "s": "Zuid",
+        "sw": "Zuidwest",
+        "w": "West",
+        "nw": "Noordwest"
+      },
       "hideSubmitSignature": "Kies hierboven een signatuurroute om de route direct te plannen.",
       "hideSubmitScenic": "Kies hierboven een corridor om de route direct te plannen.",
       "submit": "Route plannen",
@@ -150,6 +163,13 @@
       "duration": "Rijtijd (geschat)",
       "knooppunten": "Knooppunten",
       "gpxExport": "GPX exporteren (Garmin / Strava)"
+    },
+    "alternatives": {
+      "show": "Toon 5 routevarianten",
+      "loading": "Varianten worden berekend…",
+      "error": "Varianten konden niet worden geladen.",
+      "choose": "Deze route kiezen",
+      "chosen": "Gekozen ✓"
     },
     "scenic": {
       "loading": "Corridors laden…",

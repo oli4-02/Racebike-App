@@ -7,6 +7,7 @@ import AddressSearch from "@/components/AddressSearch";
 import LocaleSwitcher from "@/components/LocaleSwitcher";
 import OneWayTargetPicker, { type OneWaySubMode } from "@/components/OneWayTargetPicker";
 import PlannerForm, { type AppMode } from "@/components/PlannerForm";
+import RouteAlternativesPicker from "@/components/RouteAlternativesPicker";
 import RouteSummary from "@/components/RouteSummary";
 import SignatureRoutePicker from "@/components/SignatureRoutePicker";
 import TrainReturnPanel from "@/components/TrainReturnPanel";
@@ -47,6 +48,7 @@ export default function PlannerPage() {
   const [start, setStart] = useState<LatLon | null>(null);
   const [appMode, setAppMode] = useState<AppMode>("roundtrip");
   const [distanceKm, setDistanceKm] = useState(60);
+  const [direction, setDirection] = useState<number | null>(null);
   const [date, setDate] = useState(today());
   const [priorities, setPriorities] = useState<Priorities>(DEFAULT_PRIORITIES);
   const [poiCategories, setPoiCategories] = useState<POICategory[]>([
@@ -102,6 +104,7 @@ export default function PlannerPage() {
           date,
           priorities,
           destination: mode === "oneway" ? destination! : undefined,
+          direction: mode === "roundtrip" ? direction : undefined,
         },
         locale
       );
@@ -113,6 +116,15 @@ export default function PlannerPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleRouteAlternative(planned: PlannedRoute) {
+    setError(null);
+    setScenicPlan(null);
+    setSignaturePlan(null);
+    setRoute(planned);
+    setPois([]);
+    await loadPois(planned.geometry);
   }
 
   async function handleScenicRoute(result: ScenicRoutePlan) {
@@ -200,6 +212,17 @@ export default function PlannerPage() {
           />
         )}
 
+        {appMode === "roundtrip" && start && (
+          <RouteAlternativesPicker
+            start={start}
+            distanceKm={distanceKm}
+            date={date}
+            priorities={priorities}
+            direction={direction}
+            onPlanned={handleRouteAlternative}
+          />
+        )}
+
         {appMode === "signature" && start && (
           <SignatureRoutePicker
             start={start}
@@ -222,6 +245,8 @@ export default function PlannerPage() {
           setPriorities={setPriorities}
           poiCategories={poiCategories}
           setPoiCategories={setPoiCategories}
+          direction={direction}
+          setDirection={setDirection}
           onSubmit={handleSubmit}
           loading={loading}
           canSubmit={canSubmit}

@@ -8,6 +8,19 @@ import type { POICategory, Priorities } from "@/lib/types";
 export type AppMode = "roundtrip" | "oneway" | "signature";
 
 const POI_CATEGORIES: POICategory[] = ["fuel", "supermarket", "ice_cream", "cafe"];
+// Compass bearings for the roundtrip "direction" picker; null means "any" (the
+// original all-around loop shape).
+const DIRECTION_OPTIONS: { value: number | null; key: string }[] = [
+  { value: null, key: "any" },
+  { value: 0, key: "n" },
+  { value: 45, key: "ne" },
+  { value: 90, key: "e" },
+  { value: 135, key: "se" },
+  { value: 180, key: "s" },
+  { value: 225, key: "sw" },
+  { value: 270, key: "w" },
+  { value: 315, key: "nw" },
+];
 
 export default function PlannerForm(props: {
   appMode: AppMode;
@@ -20,6 +33,8 @@ export default function PlannerForm(props: {
   setPriorities: (p: Priorities) => void;
   poiCategories: POICategory[];
   setPoiCategories: (v: POICategory[]) => void;
+  direction: number | null;
+  setDirection: (v: number | null) => void;
   onSubmit: () => void;
   loading: boolean;
   canSubmit: boolean;
@@ -37,6 +52,8 @@ export default function PlannerForm(props: {
     setPriorities,
     poiCategories,
     setPoiCategories,
+    direction,
+    setDirection,
     onSubmit,
     loading,
     canSubmit,
@@ -116,6 +133,24 @@ export default function PlannerForm(props: {
           className="w-full"
         />
       </div>
+
+      {appMode === "roundtrip" && (
+        <div>
+          <label className="block text-sm font-medium mb-1">{t("direction")}</label>
+          <select
+            value={direction === null ? "any" : String(direction)}
+            onChange={(e) => setDirection(e.target.value === "any" ? null : Number(e.target.value))}
+            className="w-full rounded-md border border-meewind-border bg-meewind-bg-raised px-3 py-2 text-sm"
+          >
+            {DIRECTION_OPTIONS.map((opt) => (
+              <option key={opt.key} value={opt.value === null ? "any" : opt.value}>
+                {t(`directions.${opt.key}`)}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-meewind-fg-muted">{t("directionHint")}</p>
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium mb-1">{t("date")}</label>

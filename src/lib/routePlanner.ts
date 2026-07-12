@@ -115,24 +115,47 @@ function scoreCandidate(
   );
 }
 
+// Half-width of the bearing cone used for a direction-biased ("tube-shaped")
+// roundtrip -- wide enough that the loop still has two distinct sides to go
+// out on and come back on, narrow enough that it reads as "heading that way"
+// rather than "roughly everywhere".
+const DIRECTIONAL_CONE_HALF_WIDTH = 75;
+
 /**
- * Picks knooppunten spread around the start point at roughly the radius a
- * loop of the target distance implies, one per bearing sector (weighted by
+ * Picks knooppunten for a roundtrip loop, one per bearing sector (weighted by
  * priorities), then sorts them by bearing so the resulting sequence traces a
  * simple (non-crossing) loop. This approximates the real knooppunten-network
  * topology without needing to reconstruct its full routed-way graph from
  * Overpass relations.
+ *
+ * Without a `direction`, sectors are spread across the full 360° around the
+ * start, which is the right shape for "explore what's nearby" but always
+ * reads as circling the start town rather than actually going anywhere --
+ * for Amsterdam specifically, this is what makes the loop hug the city
+ * instead of heading out into the countryside. With a `direction`, sectors
+ * are instead spread across a narrower cone facing that bearing and the
+ * radius is computed for an out-and-back shape (reaching much further out
+ * per km than a full loop does), producing the "go this way for a while,
+ * then loop back" shape that was being asked for.
  */
 function selectRoundTripNodes(
   start: LatLon,
   pool: Knooppunt[],
   targetDistanceM: number,
   priorities: Priorities,
-  featureScores: Map<number, NodeFeatureScores>
+  featureScores: Map<number, NodeFeatureScores>,
+  direction?: number | null
 ): Knooppunt[] {
+  const hasDirection = direction !== null && direction !== undefined;
+
   const detourFactor = 1.3; // roads wind more than straight lines
-  const idealRadius = targetDistanceM / (2 * Math.PI * detourFactor);
+  const idealRadius = hasDirection
+    ? targetDistanceM / (2 * detourFactor) // there-and-back, not a full loop
+    : targetDistanceM / (2 * Math.PI * detourFactor);
   const scored = scoreNodes(start, pool);
+  const inCone = hasDirection
+    ? scored.filter((n) => Math.abs(angleDiff(direction!, n.bearingFromStart)) <= DIRECTIONAL_CONE_HALF_WIDTH)
+    : scored;
 
   // Higher shortestTime priority means fewer, more direct hops.
   const sectorCount = clampNum(
@@ -140,14 +163,21 @@ function selectRoundTripNodes(
     5,
     10
   );
-  const sectorWidth = 360 / sectorCount;
+  const angleSpan = hasDirection ? DIRECTIONAL_CONE_HALF_WIDTH * 2 : 360;
+  const sectorWidth = angleSpan / sectorCount;
+  const coneStart = hasDirection ? direction! - DIRECTIONAL_CONE_HALF_WIDTH : 0;
   const buckets: ScoredNode[][] = Array.from({ length: sectorCount }, () => []);
-  scored.forEach((n) => {
-    const idx = Math.floor(n.bearingFromStart / sectorWidth) % sectorCount;
+  inCone.forEach((n) => {
+    const relativeBearing = (((n.bearingFromStart - coneStart) % 360) + 360) % 360;
+    const idx = clampNum(Math.floor(relativeBearing / sectorWidth), 0, sectorCount - 1);
     buckets[idx].push(n);
   });
 
-  const chosen = buckets
+  // Buckets are already in angular order by construction (index 0 is the
+  // sector nearest coneStart, increasing from there), so the chosen nodes
+  // trace a simple loop without needing an extra sort -- which would in
+  // fact misorder a direction cone that straddles the 0/360 wrap.
+  return buckets
     .filter((b) => b.length > 0)
     .map((bucket) => {
       bucket.sort(
@@ -157,9 +187,6 @@ function selectRoundTripNodes(
       );
       return bucket[0];
     });
-
-  chosen.sort((a, b) => a.bearingFromStart - b.bearingFromStart);
-  return chosen;
 }
 
 const ONE_WAY_CONE_HALF_WIDTH = 55;
@@ -285,57 +312,22 @@ async function reroute(sequence: LatLon[], locale: AppLocale) {
 const TOLERANCE = 0.2; // accept +/-20% of target distance
 const MAX_REFINE_ITERATIONS = 3;
 
-export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
-  const priorities: Priorities = { ...DEFAULT_PRIORITIES, ...req.priorities };
-  const locale = resolveLocale(req.locale);
-  const strings = ROUTE_PLANNER_STRINGS[locale];
-
-  if (req.mode === "oneway" && !req.destination) {
-    throw new Error(strings.onewayDestinationRequired);
-  }
-
-  const approxTargetM =
-    req.mode === "roundtrip"
-      ? req.distanceKm * 1000
-      : distance(req.start, req.destination!);
-
-  const searchRadius =
-    req.mode === "roundtrip"
-      ? clampNum(approxTargetM * 0.45, 3000, 30000)
-      : clampNum(approxTargetM * 0.9, 3000, 60000);
-
-  const [pool, areaFeatures] = await Promise.all([
-    fetchKnooppunten(req.start, searchRadius, locale),
-    fetchAreaFeatures(req.start, searchRadius, true, locale),
-  ]);
-
-  if (pool.length < 3) {
-    throw new Error(strings.tooFewNodes);
-  }
-
-  const featureScores = computeFeatureScores(pool, areaFeatures);
-
-  let nodes: Knooppunt[];
-  let targetDistanceM: number;
-
-  if (req.mode === "roundtrip") {
-    targetDistanceM = req.distanceKm * 1000;
-    nodes = selectRoundTripNodes(req.start, pool, targetDistanceM, priorities, featureScores);
-    if (nodes.length < 2) {
-      throw new Error(strings.noSensibleRoute);
-    }
-  } else {
-    const result = selectOneWayNodes(
-      req.start,
-      req.destination!,
-      pool,
-      priorities,
-      featureScores
-    );
-    nodes = result.nodes;
-    targetDistanceM = result.targetDistanceM;
-  }
-
+/**
+ * Turns a chosen node sequence into an actual routed PlannedRoute: routes it
+ * via OSRM, then iteratively drops/adds nodes to close in on the target
+ * distance. Shared by planRoute (single route) and planRoundTripAlternatives
+ * (several directional variants off the same node pool), so both stay in
+ * sync with the same refine-loop behavior.
+ */
+async function finalizeRoute(
+  req: Pick<PlanRequest, "mode" | "start" | "destination">,
+  nodes: Knooppunt[],
+  targetDistanceM: number,
+  pool: Knooppunt[],
+  priorities: Priorities,
+  featureScores: Map<number, NodeFeatureScores>,
+  locale: AppLocale
+): Promise<PlannedRoute> {
   const buildSequence = (ns: Knooppunt[]): LatLon[] =>
     req.mode === "roundtrip"
       ? [req.start, ...ns, req.start]
@@ -408,6 +400,143 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
     totalDistanceM,
     totalDurationS,
   };
+}
+
+/** Fetches the shared knooppunt pool + area features once for a start point/search radius, reused by both planRoute and planRoundTripAlternatives. */
+async function fetchPoolAndFeatures(
+  start: LatLon,
+  searchRadius: number,
+  locale: AppLocale,
+  strings: (typeof ROUTE_PLANNER_STRINGS)[AppLocale]
+): Promise<{ pool: Knooppunt[]; featureScores: Map<number, NodeFeatureScores> }> {
+  const [pool, areaFeatures] = await Promise.all([
+    fetchKnooppunten(start, searchRadius, locale),
+    fetchAreaFeatures(start, searchRadius, true, locale),
+  ]);
+  if (pool.length < 3) {
+    throw new Error(strings.tooFewNodes);
+  }
+  return { pool, featureScores: computeFeatureScores(pool, areaFeatures) };
+}
+
+export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
+  const priorities: Priorities = { ...DEFAULT_PRIORITIES, ...req.priorities };
+  const locale = resolveLocale(req.locale);
+  const strings = ROUTE_PLANNER_STRINGS[locale];
+
+  if (req.mode === "oneway" && !req.destination) {
+    throw new Error(strings.onewayDestinationRequired);
+  }
+
+  const approxTargetM =
+    req.mode === "roundtrip"
+      ? req.distanceKm * 1000
+      : distance(req.start, req.destination!);
+
+  const searchRadius =
+    req.mode === "roundtrip"
+      ? clampNum(approxTargetM * 0.45, 3000, 30000)
+      : clampNum(approxTargetM * 0.9, 3000, 60000);
+
+  const { pool, featureScores } = await fetchPoolAndFeatures(req.start, searchRadius, locale, strings);
+
+  let nodes: Knooppunt[];
+  let targetDistanceM: number;
+
+  if (req.mode === "roundtrip") {
+    targetDistanceM = req.distanceKm * 1000;
+    nodes = selectRoundTripNodes(
+      req.start,
+      pool,
+      targetDistanceM,
+      priorities,
+      featureScores,
+      req.direction
+    );
+    if (nodes.length < 2) {
+      throw new Error(strings.noSensibleRoute);
+    }
+  } else {
+    const result = selectOneWayNodes(
+      req.start,
+      req.destination!,
+      pool,
+      priorities,
+      featureScores
+    );
+    nodes = result.nodes;
+    targetDistanceM = result.targetDistanceM;
+  }
+
+  return finalizeRoute(req, nodes, targetDistanceM, pool, priorities, featureScores, locale);
+}
+
+const ALTERNATIVE_CONCURRENCY = 2;
+
+/** Runs async tasks with at most `limit` in flight at once, preserving result order. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+/**
+ * Generates several roundtrip route options off a single shared knooppunt
+ * pool/feature fetch (one Overpass round-trip instead of `count`), each
+ * biased towards a different compass direction so they read as genuinely
+ * different rides rather than minor variations of the same loop. Without an
+ * explicit `req.direction`, the directions are spread evenly around the
+ * compass; with one, they're jittered around it so the user still gets a
+ * choice while staying roughly in the direction they asked for.
+ */
+export async function planRoundTripAlternatives(
+  req: PlanRequest,
+  count = 5
+): Promise<{ direction: number | null; route: PlannedRoute }[]> {
+  const priorities: Priorities = { ...DEFAULT_PRIORITIES, ...req.priorities };
+  const locale = resolveLocale(req.locale);
+  const strings = ROUTE_PLANNER_STRINGS[locale];
+
+  const targetDistanceM = req.distanceKm * 1000;
+  const searchRadius = clampNum(targetDistanceM * 0.45, 3000, 30000);
+  const { pool, featureScores } = await fetchPoolAndFeatures(req.start, searchRadius, locale, strings);
+
+  const directions: (number | null)[] =
+    req.direction === null || req.direction === undefined
+      ? Array.from({ length: count }, (_, i) => (360 / count) * i)
+      : Array.from({ length: count }, (_, i) => {
+          const spread = 60; // total jitter width around the chosen direction
+          const offset = count > 1 ? -spread / 2 + (spread / (count - 1)) * i : 0;
+          return (((req.direction! + offset) % 360) + 360) % 360;
+        });
+
+  const results = await mapWithConcurrency(directions, ALTERNATIVE_CONCURRENCY, async (direction) => {
+    const nodes = selectRoundTripNodes(req.start, pool, targetDistanceM, priorities, featureScores, direction);
+    if (nodes.length < 2) return null;
+    const route = await finalizeRoute(
+      { mode: "roundtrip", start: req.start },
+      nodes,
+      targetDistanceM,
+      pool,
+      priorities,
+      featureScores,
+      locale
+    );
+    return { direction, route };
+  });
+
+  return results.filter((r): r is { direction: number | null; route: PlannedRoute } => r !== null);
 }
 
 function indexOfLargestDetour(legs: OsrmLeg[]): number {

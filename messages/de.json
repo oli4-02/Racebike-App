@@ -130,6 +130,19 @@
       "poiSupermarket": "🛒 Supermarkt",
       "poiIceCream": "🍦 Eisdiele",
       "poiCafe": "☕ Café",
+      "direction": "Richtung",
+      "directionHint": "Bestimmt eine Richtung, um eher hinaus aufs Land zu fahren statt im Kreis um den Startpunkt.",
+      "directions": {
+        "any": "Egal (rund um den Start)",
+        "n": "Norden",
+        "ne": "Nordosten",
+        "e": "Osten",
+        "se": "Südosten",
+        "s": "Süden",
+        "sw": "Südwesten",
+        "w": "Westen",
+        "nw": "Nordwesten"
+      },
       "hideSubmitSignature": "Oben eine Signature-Route auswählen, um die Route direkt zu planen.",
       "hideSubmitScenic": "Oben einen Korridor auswählen, um die Route direkt zu planen.",
       "submit": "Route planen",
@@ -150,6 +163,13 @@
       "duration": "Fahrzeit (geschätzt)",
       "knooppunten": "Knotenpunkte",
       "gpxExport": "GPX exportieren (Garmin / Strava)"
+    },
+    "alternatives": {
+      "show": "5 Routen-Varianten anzeigen",
+      "loading": "Berechne Varianten…",
+      "error": "Varianten konnten nicht geladen werden.",
+      "choose": "Diese Route wählen",
+      "chosen": "Ausgewählt ✓"
     },
     "scenic": {
       "loading": "Lade Korridore…",

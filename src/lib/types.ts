@@ -48,6 +48,14 @@ export type PlanRequest = {
   priorities?: Priorities;
   /** One-way trips always resolve to a concrete destination (typed address in Modus A, or a picked suggestion in Modus B). */
   destination?: LatLon;
+  /**
+   * Roundtrip-only: a compass bearing (0-359, 0 = north) to head out towards
+   * instead of looping all the way around the start. When set, the loop is
+   * biased into a cone around this bearing (an elongated "out and back"
+   * shape) rather than surrounding the start on all sides. `null`/omitted
+   * keeps the default all-around loop.
+   */
+  direction?: number | null;
   /** UI language, used to localize wind explanations, POI labels, and error messages generated server-side. Defaults to "de". */
   locale?: string;
 };
@@ -71,6 +79,14 @@ export type PlannedRoute = {
   windInfo?: { directionDeg: number; speedKmh: number };
   /** Present only for round trips: which loop direction was chosen and why. */
   wind?: WindEvaluation;
+};
+
+/** One of several roundtrip route options offered side by side (see /api/plan-alternatives). */
+export type RoundTripAlternative = {
+  /** Human-readable compass label ("Nordost", "Egal", ...) for display. */
+  directionLabel: string;
+  direction: number | null;
+  route: PlannedRoute;
 };
 
 export type WindForecast = {

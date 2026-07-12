@@ -56,11 +56,49 @@ export async function routeLeg(a: LatLon, b: LatLon, locale: AppLocale = "de"): 
   };
 }
 
-/** Routes a full chain of waypoints leg by leg (sequential to stay polite with the free instance). */
+/**
+ * Routes a full chain of waypoints in a single OSRM request instead of one
+ * request per leg (previously sequential and, with the route-length refine
+ * loop in routePlanner.ts able to re-route the whole growing chain up to
+ * three more times, a major source of slow route planning). OSRM's `steps`
+ * response gives each leg's own distance/duration plus turn-by-turn steps;
+ * concatenating each leg's step geometries (dropping the duplicate point at
+ * step boundaries, same trick used when combining legs into the full route)
+ * reconstructs the per-leg geometry the rest of the app needs for the
+ * tailwind-colored polyline segments.
+ */
 export async function routeChain(points: LatLon[], locale: AppLocale = "de"): Promise<OsrmLeg[]> {
-  const legs: OsrmLeg[] = [];
-  for (let i = 1; i < points.length; i++) {
-    legs.push(await routeLeg(points[i - 1], points[i], locale));
+  if (points.length < 2) return [];
+
+  const coords = points.map((p) => `${p.lon},${p.lat}`).join(";");
+  const url = `${OSRM_BASE}/${coords}?overview=false&geometries=geojson&steps=true`;
+
+  const res = await fetch(url, {
+    headers: OSRM_HEADERS,
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) {
+    const bodySnippet = (await res.text().catch(() => "")).slice(0, 300);
+    throw new Error(
+      `${OSRM_STRINGS[locale].httpError(res.status, res.statusText)}${
+        bodySnippet ? `: ${bodySnippet}` : ""
+      }`
+    );
   }
-  return legs;
+  const data = await res.json();
+  if (data.code !== "Ok" || !data.routes?.length) {
+    throw new Error(OSRM_STRINGS[locale].noRoute(data.code ?? "unknown"));
+  }
+
+  type OsrmStep = { geometry: { coordinates: [number, number][] } };
+  type OsrmRouteLeg = { distance: number; duration: number; steps: OsrmStep[] };
+
+  return (data.routes[0].legs as OsrmRouteLeg[]).map((leg) => {
+    const geometry: LatLon[] = [];
+    leg.steps.forEach((step, i) => {
+      const stepPoints: LatLon[] = step.geometry.coordinates.map(([lon, lat]) => ({ lat, lon }));
+      geometry.push(...(i === 0 ? stepPoints : stepPoints.slice(1)));
+    });
+    return { distanceM: leg.distance, durationS: leg.duration, geometry };
+  });
 }

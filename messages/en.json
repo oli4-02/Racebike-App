@@ -130,6 +130,19 @@
       "poiSupermarket": "🛒 Supermarket",
       "poiIceCream": "🍦 Ice cream",
       "poiCafe": "☕ Café",
+      "direction": "Direction",
+      "directionHint": "Pick a direction to head out into the countryside instead of looping around the start point.",
+      "directions": {
+        "any": "Any (loop around start)",
+        "n": "North",
+        "ne": "Northeast",
+        "e": "East",
+        "se": "Southeast",
+        "s": "South",
+        "sw": "Southwest",
+        "w": "West",
+        "nw": "Northwest"
+      },
       "hideSubmitSignature": "Pick a signature route above to plan the route directly.",
       "hideSubmitScenic": "Pick a corridor above to plan the route directly.",
       "submit": "Plan route",
@@ -150,6 +163,13 @@
       "duration": "Ride time (estimated)",
       "knooppunten": "Nodes",
       "gpxExport": "Export GPX (Garmin / Strava)"
+    },
+    "alternatives": {
+      "show": "Show 5 route variants",
+      "loading": "Calculating variants…",
+      "error": "Could not load the variants.",
+      "choose": "Choose this route",
+      "chosen": "Chosen ✓"
     },
     "scenic": {
       "loading": "Loading corridors…",

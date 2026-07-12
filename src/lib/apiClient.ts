@@ -6,6 +6,7 @@ import type {
   POI,
   POICategory,
   LatLon,
+  RoundTripAlternative,
   ScenicCorridor,
   ScenicRoutePlan,
   SignatureRoute,
@@ -41,6 +42,19 @@ export async function planRoute(req: PlanRequest, locale: string): Promise<Plann
     body: JSON.stringify({ ...req, locale }),
   });
   return parseOrThrow(res);
+}
+
+export async function planRouteAlternatives(
+  req: PlanRequest,
+  locale: string
+): Promise<RoundTripAlternative[]> {
+  const res = await fetch("/api/plan-alternatives", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...req, locale }),
+  });
+  const data = await parseOrThrow(res);
+  return data.alternatives;
 }
 
 export async function fetchPois(

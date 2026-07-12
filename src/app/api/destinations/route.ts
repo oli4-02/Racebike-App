@@ -31,6 +31,15 @@ const PRESCORE_CANDIDATE_CAP = 20;
 const TOWN_CENTER_RADIUS_M = 900;
 const PREVIEW_MAX_POINTS = 100;
 
+// An absolute distance window around the target, not a percentage of it —
+// a percentage-based window (e.g. the old [0.5x, 1.3x]) gets disproportionately
+// wide for long rides and disproportionately narrow for short ones, and in
+// areas with sparse place=town/village tagging it can come up empty even
+// though perfectly good candidates exist just outside it. Widening in steps
+// (15 -> 25 -> 40 km) instead of using the widest window right away keeps
+// the common case tightly matched to the requested distance.
+const DISTANCE_TOLERANCE_STEPS_M = [15000, 25000, 40000];
+
 type Candidate = TownCandidate & { distFromStart: number };
 
 export async function POST(req: NextRequest) {
@@ -68,14 +77,16 @@ export async function POST(req: NextRequest) {
             .catch(() => null)
         : null;
 
-    const towns = await fetchTowns(start, targetDistanceM * 1.3, locale);
-    const inRange: Candidate[] = towns
-      .map((t) => ({ ...t, distFromStart: distance(start, t) }))
-      .filter(
-        (t) =>
-          t.distFromStart >= targetDistanceM * 0.5 &&
-          t.distFromStart <= targetDistanceM * 1.3
-      );
+    const maxToleranceM = DISTANCE_TOLERANCE_STEPS_M[DISTANCE_TOLERANCE_STEPS_M.length - 1];
+    const searchRadiusM = targetDistanceM + maxToleranceM;
+    const towns = await fetchTowns(start, searchRadiusM, locale);
+    const withDistance = towns.map((t) => ({ ...t, distFromStart: distance(start, t) }));
+
+    let inRange: Candidate[] = [];
+    for (const toleranceM of DISTANCE_TOLERANCE_STEPS_M) {
+      inRange = withDistance.filter((t) => Math.abs(t.distFromStart - targetDistanceM) <= toleranceM);
+      if (inRange.length > 0) break;
+    }
 
     if (inRange.length === 0) {
       return NextResponse.json({ suggestions: [] });
@@ -91,7 +102,7 @@ export async function POST(req: NextRequest) {
 
     const [tourismPoints, areaFeatures, wikiInfos] = await Promise.all([
       fetchTourismHistoricPoints(preScored, TOWN_CENTER_RADIUS_M, locale),
-      fetchAreaFeatures(start, targetDistanceM * 1.3, false, locale),
+      fetchAreaFeatures(start, searchRadiusM, false, locale),
       Promise.all(preScored.map((c) => fetchWikipediaInfo(c.name))),
     ]);
 
