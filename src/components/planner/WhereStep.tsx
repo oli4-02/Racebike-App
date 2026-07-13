@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import AddressSearch from "@/components/AddressSearch";
 import OneWayTargetPicker, { type OneWaySubMode } from "@/components/OneWayTargetPicker";
+import PreferencesGateHint from "@/components/planner/PreferencesGateHint";
 import RouteAlternativesPicker from "@/components/RouteAlternativesPicker";
 import SignatureRoutePicker from "@/components/SignatureRoutePicker";
 import DateField from "@/components/ui/DateField";
@@ -53,6 +54,8 @@ export default function WhereStep({
   onRouteAlternative,
   onSignatureRoute,
   onDistanceKmChange,
+  hasVisitedPreferences,
+  onGoToPreferences,
 }: {
   appMode: AppMode;
   setAppMode: (m: AppMode) => void;
@@ -76,6 +79,8 @@ export default function WhereStep({
   onRouteAlternative: (route: PlannedRoute) => void;
   onSignatureRoute: (result: SignatureRoutePlan) => void;
   onDistanceKmChange: (km: number) => void;
+  hasVisitedPreferences: boolean;
+  onGoToPreferences: () => void;
 }) {
   const t = useTranslations("planner.form");
   const isScenicMode = appMode === "oneway" && oneWaySubMode === "scenic";
@@ -161,6 +166,8 @@ export default function WhereStep({
           onSelectDestination={onSelectDestination}
           onScenicRoute={onScenicRoute}
           onSubModeChange={onSubModeChange}
+          hasVisitedPreferences={hasVisitedPreferences}
+          onGoToPreferences={onGoToPreferences}
         />
       )}
 
@@ -177,16 +184,20 @@ export default function WhereStep({
       )}
 
       {appMode === "roundtrip" && start && (
-        <RouteAlternativesPicker
-          start={start}
-          distanceKm={distanceKm}
-          date={date}
-          priorities={priorities}
-          direction={direction}
-          avgSpeedKmh={avgSpeedKmh}
-          poiCategories={poiCategories}
-          onPlanned={onRouteAlternative}
-        />
+        hasVisitedPreferences ? (
+          <RouteAlternativesPicker
+            start={start}
+            distanceKm={distanceKm}
+            date={date}
+            priorities={priorities}
+            direction={direction}
+            avgSpeedKmh={avgSpeedKmh}
+            poiCategories={poiCategories}
+            onPlanned={onRouteAlternative}
+          />
+        ) : (
+          <PreferencesGateHint onGoToPreferences={onGoToPreferences} />
+        )
       )}
     </div>
   );

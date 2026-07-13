@@ -69,6 +69,19 @@ export default function PlannerPage() {
 
   const [activeTab, setActiveTab] = useState<PlannerTabKey>("where");
   const [collapsed, setCollapsed] = useState(false);
+  // The 5 roundtrip variants and one-way destination suggestions both rank
+  // candidates using `priorities` -- offering them before the rider has even
+  // looked at the preferences tab means they'd be scored against whatever
+  // defaults happen to be set, only to need redoing once adjusted. Gated
+  // behind having visited that tab at least once (not "confirmed" it --
+  // just having seen it is enough to make an informed choice or leave the
+  // defaults on purpose).
+  const [hasVisitedPreferences, setHasVisitedPreferences] = useState(false);
+
+  function handleTabChange(tab: PlannerTabKey) {
+    setActiveTab(tab);
+    if (tab === "preferences") setHasVisitedPreferences(true);
+  }
 
   // The core planner only knows roundtrip/oneway; "signature" is a UI-level
   // mode that always resolves to a roundtrip plan via its own endpoint.
@@ -240,7 +253,7 @@ export default function PlannerPage() {
         backLabel={t("backToLanding")}
         tabs={tabs}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((c) => !c)}
         footer={
@@ -289,6 +302,8 @@ export default function PlannerPage() {
             onRouteAlternative={handleRouteAlternative}
             onSignatureRoute={handleSignatureRoute}
             onDistanceKmChange={setDistanceKm}
+            hasVisitedPreferences={hasVisitedPreferences}
+            onGoToPreferences={() => handleTabChange("preferences")}
           />
         )}
 

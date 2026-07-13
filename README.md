@@ -204,6 +204,35 @@ jetzt unten rechts (`zoomControl={false}` + eigene `<ZoomControl
 position="bottomright">`) statt oben links, und der Straßentyp-Umschalter
 sitzt oben rechts unterhalb des Wind-Kompass-Overlays statt oben links.
 
+**Bug gefunden und behoben**: Leaflets SVG-Renderer merkt sich einen
+gepolsterten Render-Bereich vom letzten größenrelevanten Ereignis; wechselte
+man Tabs im Panel hin und her, blieb dieser Bereich stehen, obwohl sich die
+Kartengröße selbst nie geändert hatte (die Karte ist `absolute inset-0`,
+komplett unabhängig vom schwebenden Panel) — der Vorschau-Kreis wurde dann
+zur Hälfte abgeschnitten dargestellt. `AutoInvalidateSize` (in
+`RouteMap.tsx`) hängt einen `ResizeObserver` an den Karten-Container und ruft
+bei jeder Größenänderung `map.invalidateSize()` — allgemeiner und robuster
+als jeden einzelnen Layout-Auslöser einzeln zu jagen.
+
+### Vorlieben zuerst: Vorschläge erst nach einem Blick auf "Deine Vorlieben"
+
+Die 5 Rundtour-Varianten und die One-Way-Zielvorschläge ranken ihre
+Kandidaten beide anhand von `priorities` — bot man sie schon im "Wo & wie
+weit"-Tab an, bevor der Nutzer die Prioritäten-Regler überhaupt gesehen
+hatte, wurden sie gegen die Standard-Gewichtung berechnet und mussten nach
+dem Anpassen der Vorlieben ohnehin neu geholt werden. `page.tsx` merkt sich
+jetzt `hasVisitedPreferences` (wird beim ersten Wechsel zum
+"Vorlieben"-Tab `true`, bleibt das auch beim Zurückwechseln) und reicht das
+zusammen mit einem `onGoToPreferences`-Callback an `WhereStep` und
+`OneWayTargetPicker` durch. Bis dahin zeigt `PreferencesGateHint` (neue,
+gemeinsam genutzte Komponente) statt des "5 Routen-Varianten
+anzeigen"-Buttons bzw. der Vorschläge-Suche einen Hinweis mit Sprung-Button
+zum Vorlieben-Tab. Die direkte Zieladresseneingabe und die
+Landschafts-/Signature-Route-Listen sind davon bewusst nicht betroffen — sie
+nutzen `priorities` gar nicht (Adresseingabe) oder nur als leichten,
+nachrangigen Einfluss auf eine ohnehin manuell gewählte Tour (Korridor/
+Signature-Route), nicht als das Ranking-Kriterium selbst.
+
 ### Mehrsprachigkeit (DE/EN/NL)
 
 [next-intl](https://next-intl.dev) mit Locale-Routing (`de` als Default ohne
@@ -235,6 +264,28 @@ direkt nutzen:
 Der Client schickt seine aktuelle Locale (`useLocale()` aus `next-intl`) bei
 jedem `apiClient.ts`-Aufruf mit, damit Server-Antworten (Fehlermeldungen,
 Windbegründung, kuratierte Listen) zur UI-Sprache passen.
+
+### Favicon
+
+Ersetzt das Next.js-Standard-Favicon (der schwarze Dreieck-Platzhalter aus
+dem Projekt-Scaffold). `src/app/icon.svg` ist ein selbst gezeichnetes,
+minimalistisches Fahrrad-Liniensymbol (lindgrün auf dunkelgrünem
+abgerundetem Quadrat, exakt die Design-Token-Farben `--meewind-accent` /
+`--meewind-bg` — da SVG kein `oklch()` in jedem Kontext zuverlässig
+rendert, als konkrete Hex-Werte `#9ed24d` / `#041e0f` eingesetzt, per
+Canvas-`fillStyle`-Rendering aus den Original-`oklch()`-Werten bestimmt,
+damit sie exakt passen). Next.js bindet
+`app/icon.svg` automatisch als `<link rel="icon" type="image/svg+xml">` ein
+— File-Convention, kein Code nötig. Für Browser/Kontexte ohne SVG-Favicon-
+Unterstützung liegen zusätzlich `icon.png` (32×32) und `apple-icon.png`
+(180×180, für iOS-Homescreen) daneben, ebenfalls automatisch eingebunden.
+`favicon.ico` (Fallback für Anfragen an `/favicon.ico`, die manche Browser/
+Crawler unabhängig von den `<link rel="icon">`-Tags stellen) wurde durch ein
+selbst zusammengesetztes Multi-Size-ICO (16/32/48px, jeweils PNG-komprimiert
+eingebettet — das moderne ICO-Format, keine rohen BMP-Daten) aus demselben
+Symbol ersetzt; alle vier Dateien sind mit `sharp` (bereits als
+Next.js-Abhängigkeit vorhanden) aus dem SVG gerendert, keine neue
+Abhängigkeit nötig.
 
 ### Fotos auf der Landingpage
 

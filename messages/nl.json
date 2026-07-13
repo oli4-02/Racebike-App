@@ -154,6 +154,8 @@
       },
       "hideSubmitSignature": "Kies hierboven een signatuurroute om de route direct te plannen.",
       "hideSubmitScenic": "Kies hierboven een corridor om de route direct te plannen.",
+      "preferencesGateHint": "Stel eerst je voorkeuren in, zodat de suggesties echt bij je passen.",
+      "goToPreferences": "Naar voorkeuren",
       "submit": "Route plannen",
       "submitLoading": "Route wordt gepland…",
       "submitHintNoStart": "Kies een startpunt via adreszoeken of door op de kaart te klikken.",

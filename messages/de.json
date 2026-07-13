@@ -154,6 +154,8 @@
       },
       "hideSubmitSignature": "Oben eine Signature-Route auswählen, um die Route direkt zu planen.",
       "hideSubmitScenic": "Oben einen Korridor auswählen, um die Route direkt zu planen.",
+      "preferencesGateHint": "Lege zuerst deine Vorlieben fest, damit die Vorschläge zu dir passen.",
+      "goToPreferences": "Zu den Vorlieben",
       "submit": "Route planen",
       "submitLoading": "Route wird geplant…",
       "submitHintNoStart": "Startpunkt per Adresssuche oder Klick auf die Karte wählen.",

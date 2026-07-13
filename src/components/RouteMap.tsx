@@ -51,6 +51,28 @@ function RecenterOnStart({ start }: { start: LatLon | null }) {
   return null;
 }
 
+/**
+ * The map sits behind a floating panel that changes size independently
+ * (collapsing, switching tabs) without ever resizing the map's own
+ * container -- but Leaflet's vector (SVG) renderer still caches a padded
+ * render area from whenever it last saw a size-affecting event, and a
+ * layout reflow elsewhere on the page can invalidate that cache without
+ * Leaflet knowing, silently clipping circles/polygons drawn near the edge
+ * of the stale area. `invalidateSize()` forces Leaflet to recheck its
+ * actual container size and redraw; a ResizeObserver on the container
+ * covers this generally instead of chasing each specific layout trigger.
+ */
+function AutoInvalidateSize() {
+  const map = useMap();
+  useEffect(() => {
+    const container = map.getContainer();
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [map]);
+  return null;
+}
+
 function WindCompassOverlay({
   wind,
 }: {
@@ -273,6 +295,7 @@ export default function RouteMap({
         />
         <ClickHandler onClick={onSetStart} />
         <RecenterOnStart start={start} />
+        <AutoInvalidateSize />
         {start && preview && <LivePreviewOverlay start={start} preview={preview} />}
         {start && (
           <Marker position={[start.lat, start.lon]}>
