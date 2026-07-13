@@ -68,6 +68,21 @@ export type RouteLeg = {
   geometry: LatLon[]; // road-following geometry from OSRM
 };
 
+/**
+ * Length-weighted share (0-100, roughly summing to 100) of the route's
+ * surface by road type, so a rider can tell whether a route mostly follows
+ * dedicated cycleways, quiet/traffic-calmed streets, or roads shared with
+ * car traffic. Best-effort classification from OSM `highway=*` tags along
+ * the route corridor (see fetchRoadTypeBreakdown) -- not an exact
+ * distance-by-surface measurement.
+ */
+export type RoadTypeBreakdown = {
+  cyclewayPct: number;
+  residentialPct: number;
+  mainRoadPct: number;
+  otherPct: number;
+};
+
 export type PlannedRoute = {
   mode: RouteMode;
   knooppunten: Knooppunt[];

@@ -162,7 +162,15 @@
       "distance": "Afstand",
       "duration": "Rijtijd (geschat)",
       "knooppunten": "Knooppunten",
-      "gpxExport": "GPX exporteren (Garmin / Strava)"
+      "gpxExport": "GPX exporteren (Garmin / Strava)",
+      "roadTypes": {
+        "title": "Wegtype",
+        "loading": "Wegtype-analyse laden…",
+        "cyclewayPct": "Fietspad",
+        "residentialPct": "Woonstraat",
+        "mainRoadPct": "Hoofdweg",
+        "otherPct": "Overig"
+      }
     },
     "alternatives": {
       "show": "Toon 5 routevarianten",

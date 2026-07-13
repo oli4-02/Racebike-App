@@ -120,6 +120,23 @@ function scoreCandidate(
 // out on and come back on, narrow enough that it reads as "heading that way"
 // rather than "roughly everywhere".
 const DIRECTIONAL_CONE_HALF_WIDTH = 75;
+const ROUNDTRIP_DETOUR_FACTOR = 1.3; // roads wind more than straight lines
+
+/**
+ * How far out a roundtrip should reach for a given target distance: a full
+ * loop reaches only `target / (2*pi*detour)` from the start, while an
+ * out-and-back shape (direction set) covers the same distance going roughly
+ * `target / (2*detour)` out and the same back. Shared by node selection, the
+ * refine loop, and the Overpass search radius so all three agree on how far
+ * out "direction-biased" actually means -- if the search radius doesn't
+ * reach as far as the ideal radius, there are no candidate knooppunten out
+ * there to pick regardless of what the selection logic wants.
+ */
+function roundTripIdealRadius(targetDistanceM: number, hasDirection: boolean): number {
+  return hasDirection
+    ? targetDistanceM / (2 * ROUNDTRIP_DETOUR_FACTOR)
+    : targetDistanceM / (2 * Math.PI * ROUNDTRIP_DETOUR_FACTOR);
+}
 
 /**
  * Picks knooppunten for a roundtrip loop, one per bearing sector (weighted by
@@ -147,11 +164,7 @@ function selectRoundTripNodes(
   direction?: number | null
 ): Knooppunt[] {
   const hasDirection = direction !== null && direction !== undefined;
-
-  const detourFactor = 1.3; // roads wind more than straight lines
-  const idealRadius = hasDirection
-    ? targetDistanceM / (2 * detourFactor) // there-and-back, not a full loop
-    : targetDistanceM / (2 * Math.PI * detourFactor);
+  const idealRadius = roundTripIdealRadius(targetDistanceM, hasDirection);
   const scored = scoreNodes(start, pool);
   const inCone = hasDirection
     ? scored.filter((n) => Math.abs(angleDiff(direction!, n.bearingFromStart)) <= DIRECTIONAL_CONE_HALF_WIDTH)
@@ -320,7 +333,7 @@ const MAX_REFINE_ITERATIONS = 3;
  * sync with the same refine-loop behavior.
  */
 async function finalizeRoute(
-  req: Pick<PlanRequest, "mode" | "start" | "destination">,
+  req: Pick<PlanRequest, "mode" | "start" | "destination" | "direction">,
   nodes: Knooppunt[],
   targetDistanceM: number,
   pool: Knooppunt[],
@@ -352,10 +365,17 @@ async function finalizeRoute(
       // far (not the fixed start) and the candidate must still make forward
       // progress towards the destination -- same reasoning as
       // selectOneWayNodes, otherwise this refinement step could reintroduce
-      // the exact backtracking it's meant to fix.
+      // the exact backtracking it's meant to fix. For a direction-biased
+      // roundtrip, the same cone/out-and-back radius used by the initial
+      // selection applies here too -- otherwise a route that came up short
+      // gets "topped up" with a node picked with no direction preference at
+      // all, quietly pulling a direction-biased route back into hugging the
+      // start (the bug behind roundtrips still circling the start town even
+      // with a direction chosen).
+      const hasDirection = req.mode === "roundtrip" && req.direction !== null && req.direction !== undefined;
       const refineIdealDistance =
         req.mode === "roundtrip"
-          ? targetDistanceM / (2 * Math.PI * 1.3)
+          ? roundTripIdealRadius(targetDistanceM, hasDirection)
           : targetDistanceM / (nodes.length + 2);
       const referencePoint =
         req.mode === "oneway" && nodes.length > 0 ? nodes[nodes.length - 1] : req.start;
@@ -371,7 +391,10 @@ async function finalizeRoute(
               Math.abs(
                 angleDiff(bearing(referencePoint, req.destination!), n.bearingFromStart)
               ) <= ONE_WAY_CONE_HALF_WIDTH
-          : undefined;
+          : hasDirection
+            ? (n: ScoredNode) =>
+                Math.abs(angleDiff(req.direction!, n.bearingFromStart)) <= DIRECTIONAL_CONE_HALF_WIDTH
+            : undefined;
 
       const extra = pickExtraNode(
         referencePoint,
@@ -432,10 +455,11 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
     req.mode === "roundtrip"
       ? req.distanceKm * 1000
       : distance(req.start, req.destination!);
+  const hasDirection = req.mode === "roundtrip" && req.direction !== null && req.direction !== undefined;
 
   const searchRadius =
     req.mode === "roundtrip"
-      ? clampNum(approxTargetM * 0.45, 3000, 30000)
+      ? clampNum(roundTripIdealRadius(approxTargetM, hasDirection) * 1.2, 3000, hasDirection ? 70000 : 30000)
       : clampNum(approxTargetM * 0.9, 3000, 60000);
 
   const { pool, featureScores } = await fetchPoolAndFeatures(req.start, searchRadius, locale, strings);
@@ -509,7 +533,10 @@ export async function planRoundTripAlternatives(
   const strings = ROUTE_PLANNER_STRINGS[locale];
 
   const targetDistanceM = req.distanceKm * 1000;
-  const searchRadius = clampNum(targetDistanceM * 0.45, 3000, 30000);
+  // Every variant here gets a concrete direction (evenly spread, or jittered
+  // around req.direction), so the search radius always needs the larger
+  // out-and-back reach, never the smaller full-loop one.
+  const searchRadius = clampNum(roundTripIdealRadius(targetDistanceM, true) * 1.2, 3000, 70000);
   const { pool, featureScores } = await fetchPoolAndFeatures(req.start, searchRadius, locale, strings);
 
   const directions: (number | null)[] =
@@ -525,7 +552,7 @@ export async function planRoundTripAlternatives(
     const nodes = selectRoundTripNodes(req.start, pool, targetDistanceM, priorities, featureScores, direction);
     if (nodes.length < 2) return null;
     const route = await finalizeRoute(
-      { mode: "roundtrip", start: req.start },
+      { mode: "roundtrip", start: req.start, direction },
       nodes,
       targetDistanceM,
       pool,

@@ -152,6 +152,7 @@ API-Keys nicht im Browser offenzulegen):
 | `POST /api/scenic-route` | Landschafts-Route komplett planen | Overpass, OSRM, NS, Open-Meteo |
 | `GET /api/signature-routes` | Statische Signature-Routen-Liste | – (keine externen Calls) |
 | `POST /api/signature-route` | Signature-Route komplett planen | Overpass, OSRM, NS |
+| `POST /api/road-types` | Straßentyp-Breakdown einer Routen-Geometrie | Overpass |
 
 Kernlogik in `src/lib/`:
 - `routePlanner.ts` – wählt Knotenpunkte rund um den Start (Rundtour) bzw.
@@ -163,7 +164,8 @@ Kernlogik in `src/lib/`:
   `tailwindComponent`/`tailwindColor` fürs Kompass-Overlay und die
   Streckeneinfärbung im Frontend
 - `overpass.ts` / `osrm.ts` / `nominatim.ts` / `ns.ts` / `wikipedia.ts` –
-  Clients für die externen APIs
+  Clients für die externen APIs. `overpass.ts` enthält außerdem
+  `fetchRoadTypeBreakdown()` für die Straßentyp-Analyse (siehe unten)
 - `scenicCorridors.ts` – die kuratierte Korridor-Liste (Modus "Landschafts-Route")
 - `signatureRoutes.ts` – die kuratierte Liste bekannter NL-Rundtouren (Modus "Signature-Route")
 - `gpx.ts` – GPX-Generierung
@@ -205,6 +207,54 @@ Richtungen, mit gewählter Richtung fünf leicht gestreute Varianten um sie
 herum (±30°). `/api/plan-alternatives` liefert sie mit Distanz/Zeit und
 Kartenvorschau an `RouteAlternativesPicker` im Frontend, wo eine davon direkt
 übernommen werden kann.
+
+Diese Richtungs-Logik galt anfangs nur für die initiale Knotenpunkt-Auswahl:
+die "Refine"-Schleife in `finalizeRoute()`, die eine zu kurz/lang geratene
+Route nachträglich durch Hinzufügen/Entfernen einzelner Knotenpunkte auf die
+Zieldistanz bringt (±20% Toleranz, bis zu 3 Iterationen), hat die Richtung
+zunächst ignoriert und beim Verlängern immer den Vollkreis-Radius ohne
+Kegel-Filter benutzt — genau der häufige Fall, in dem eine gerichtete Route
+nach dem ersten OSRM-Routing noch zu kurz war, wurde also wieder Richtung
+Start "aufgefüllt" und driftete zurück zum Kreisen um Amsterdam. `finalizeRoute`
+bekommt die Richtung jetzt als Parameter und wendet in der Refine-Schleife
+denselben ±75°-Kegel und dieselbe Hin-und-zurück-Radiusformel an wie die
+initiale Auswahl. Der Overpass-Suchradius war außerdem für Rundtouren fix auf
+30 km gedeckelt, unabhängig von Richtung — die Hin-und-zurück-Radiusformel
+liegt aber für dieselbe Zieldistanz gut 3× über der Vollkreis-Formel, sodass
+lange gerichtete Rundtouren (>~65 km) nie genug Knotenpunkte weit genug
+draußen laden konnten. Der Cap ist jetzt bei gewählter Richtung 70 km statt
+30 km, und `planRoundTripAlternatives()` übergibt pro Variante deren eigene
+Richtung an `finalizeRoute` statt der ursprünglichen Anfrage-Richtung.
+
+### Performance: weniger Netzwerk-Roundtrips pro `/api/plan`-Aufruf
+
+- Die Windvorhersage (Open-Meteo) wird jetzt parallel zu `planRoute()`
+  geladen statt danach sequenziell.
+- `evaluateWindDirection()` (in `wind.ts`) verlangt für einen Wechsel auf die
+  umgekehrte Fahrtrichtung jetzt einen spürbaren Vorsprung (>0,05) statt eines
+  reinen "wer ist knapp besser"-Vergleichs — bei einem Beinahe-Gleichstand
+  spart sich `/api/plan` damit den zusätzlichen OSRM-Request für die
+  umgekehrte Routenfolge, ohne dass Anzeige (`chosenDirection`) und
+  Begründungstext (`explanation`) auseinanderlaufen können, da beide aus
+  derselben Entscheidung in `evaluateWindDirection()` stammen.
+- `routeChain()` (in `osrm.ts`) sendet alle Wegpunkte einer Route in einem
+  einzigen OSRM-Multi-Waypoint-Request (`steps=true`) statt einem sequenziellen
+  Request pro Teilstück.
+
+### Straßentyp-Transparenz (Radweg / Wohnstraße / Hauptstraße)
+
+Da OSRM-Routing über den öffentlichen Demo-Server nicht steuert, wie stark
+Wohnstraßen vermieden werden (dafür bräuchte es ein eigenes OSRM-Profil oder
+eine aufwändige Overpass-Polygon-Vermeidung — beides über den aktuellen Scope
+hinaus), zeigt Meewind stattdessen transparent an, welche Art Straße/Weg eine
+geplante Route tatsächlich nutzt: `fetchRoadTypeBreakdown()` (in
+`overpass.ts`) fragt für bis zu 150 gleichmäßig über die Routen-Geometrie
+verteilte Punkte alle `highway=*`-Ways im 20m-Korridor ab (`out geom;`) und
+gewichtet sie längenbasiert in vier Buckets (Radweg / Wohnstraße,
+Spielstraße, Fußgängerzone / Hauptstraße / Sonstige). `/api/road-types`
+stellt das als Endpoint bereit, `RouteSummary` lädt es client-seitig für die
+gerade angezeigte Route (nicht für die 5 Routen-Varianten, um deren Vorschau
+nicht zu verlangsamen) und zeigt es als farbigen Balken mit Legende an.
 
 ### Wie die Prioritäten-Regler wirken
 

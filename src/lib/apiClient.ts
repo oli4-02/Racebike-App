@@ -6,6 +6,7 @@ import type {
   POI,
   POICategory,
   LatLon,
+  RoadTypeBreakdown,
   RoundTripAlternative,
   ScenicCorridor,
   ScenicRoutePlan,
@@ -55,6 +56,19 @@ export async function planRouteAlternatives(
   });
   const data = await parseOrThrow(res);
   return data.alternatives;
+}
+
+export async function fetchRoadTypeBreakdown(
+  geometry: LatLon[],
+  locale: string
+): Promise<RoadTypeBreakdown | null> {
+  const res = await fetch("/api/road-types", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ geometry, locale }),
+  });
+  const data = await parseOrThrow(res);
+  return data.breakdown;
 }
 
 export async function fetchPois(

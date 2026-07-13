@@ -1,6 +1,7 @@
 import { routing, type AppLocale } from "@/i18n/routing";
+import { distance } from "./geo";
 import { OVERPASS_STRINGS, POI_CATEGORY_LABELS } from "./i18nStrings";
-import type { Knooppunt, LatLon, POI, POICategory } from "./types";
+import type { Knooppunt, LatLon, POI, POICategory, RoadTypeBreakdown } from "./types";
 
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
@@ -26,6 +27,8 @@ type OverpassElement = {
   lon?: number;
   center?: { lat: number; lon: number };
   tags?: Record<string, string>;
+  /** Present on ways queried with `out geom;` -- the full node-by-node line, used to measure length. */
+  geometry?: { lat: number; lon: number }[];
 };
 
 type OverpassResponse = {
@@ -334,6 +337,92 @@ out center;`;
       return { name: el.tags!.name, lat: point.lat, lon: point.lon };
     })
     .filter((_, i, arr) => arr.findIndex((c) => c.name === arr[i].name) === i);
+}
+
+const ROAD_TYPE_CORRIDOR_M = 20;
+const ROAD_TYPE_MAX_SAMPLE_POINTS = 150;
+
+function classifyHighway(highway: string | undefined): keyof RoadTypeBreakdown {
+  switch (highway) {
+    case "cycleway":
+      return "cyclewayPct";
+    case "residential":
+    case "living_street":
+    case "service":
+    case "pedestrian":
+      return "residentialPct";
+    case "primary":
+    case "secondary":
+    case "tertiary":
+    case "trunk":
+    case "unclassified":
+      return "mainRoadPct";
+    default:
+      return "otherPct";
+  }
+}
+
+/**
+ * Best-effort classification of the road surface a route actually follows
+ * (dedicated cycleway vs. residential/traffic-calmed street vs. a normal
+ * road shared with car traffic), by matching `highway=*` ways within a tight
+ * corridor of the route geometry and length-weighting each bucket -- a way
+ * sampled by several nearby route points must only count once, and a long
+ * way should count for more than a short one, so this dedupes by way id and
+ * sums each way's own geometry length rather than just counting matches.
+ * Returns null (rather than throwing) on any Overpass failure, since this is
+ * a nice-to-have transparency panel, not something that should block the
+ * route itself from displaying.
+ */
+export async function fetchRoadTypeBreakdown(
+  route: LatLon[],
+  locale: AppLocale = routing.defaultLocale
+): Promise<RoadTypeBreakdown | null> {
+  if (route.length < 2) return null;
+
+  const step = Math.max(1, Math.ceil(route.length / ROAD_TYPE_MAX_SAMPLE_POINTS));
+  const sampled = route.filter((_, i) => i % step === 0);
+  const aroundArg = sampled.map((p) => `${p.lat},${p.lon}`).join(",");
+
+  const query = `[out:json][timeout:25];
+way["highway"](around:${ROAD_TYPE_CORRIDOR_M},${aroundArg});
+out geom;`;
+
+  let data: OverpassResponse;
+  try {
+    data = await runOverpassQuery(query, locale);
+  } catch {
+    return null;
+  }
+
+  const seenWayIds = new Set<number>();
+  const bucketM: RoadTypeBreakdown = {
+    cyclewayPct: 0,
+    residentialPct: 0,
+    mainRoadPct: 0,
+    otherPct: 0,
+  };
+  let totalM = 0;
+
+  for (const el of data.elements ?? []) {
+    if (el.type !== "way" || seenWayIds.has(el.id) || !el.geometry || el.geometry.length < 2) continue;
+    seenWayIds.add(el.id);
+
+    let lengthM = 0;
+    for (let i = 1; i < el.geometry.length; i++) {
+      lengthM += distance(el.geometry[i - 1], el.geometry[i]);
+    }
+    bucketM[classifyHighway(el.tags?.highway)] += lengthM;
+    totalM += lengthM;
+  }
+
+  if (totalM === 0) return null;
+  return {
+    cyclewayPct: Math.round((bucketM.cyclewayPct / totalM) * 100),
+    residentialPct: Math.round((bucketM.residentialPct / totalM) * 100),
+    mainRoadPct: Math.round((bucketM.mainRoadPct / totalM) * 100),
+    otherPct: Math.round((bucketM.otherPct / totalM) * 100),
+  };
 }
 
 function categorize(tags: Record<string, string>): POICategory {

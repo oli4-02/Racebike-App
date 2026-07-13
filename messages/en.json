@@ -162,7 +162,15 @@
       "distance": "Distance",
       "duration": "Ride time (estimated)",
       "knooppunten": "Nodes",
-      "gpxExport": "Export GPX (Garmin / Strava)"
+      "gpxExport": "Export GPX (Garmin / Strava)",
+      "roadTypes": {
+        "title": "Road type",
+        "loading": "Loading road type breakdown…",
+        "cyclewayPct": "Cycleway",
+        "residentialPct": "Residential street",
+        "mainRoadPct": "Main road",
+        "otherPct": "Other"
+      }
     },
     "alternatives": {
       "show": "Show 5 route variants",

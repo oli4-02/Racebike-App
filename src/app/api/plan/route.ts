@@ -38,44 +38,52 @@ export async function POST(req: NextRequest) {
   const priorities = { ...DEFAULT_PRIORITIES, ...body.priorities };
 
   try {
-    let route = await planRoute({ ...body, priorities, locale });
+    // The wind forecast only depends on the start point/date, not on the
+    // route itself, so it can be fetched at the same time as planRoute()
+    // runs its own Overpass/OSRM calls instead of waiting for it to finish
+    // first -- one fewer network round trip on the critical path.
+    const [route0, forecast] = await Promise.all([
+      planRoute({ ...body, priorities, locale }),
+      isWithinForecastRange(body.date) ? fetchWindForecast(body.start, body.date) : Promise.resolve([]),
+    ]);
+    let route = route0;
 
-    if (isWithinForecastRange(body.date)) {
-      const forecast = await fetchWindForecast(body.start, body.date);
-      if (forecast.length > 0) {
-        const wind = representativeDaytimeWind(forecast);
-        route = { ...route, windInfo: wind };
+    if (forecast.length > 0) {
+      const wind = representativeDaytimeWind(forecast);
+      route = { ...route, windInfo: wind };
 
-        if (body.mode === "roundtrip") {
-          const windLegs = route.legs.map((l) => ({
-            from: l.from,
-            to: l.to,
-            distanceM: l.distanceM,
-          }));
-          const evaluation = evaluateWindDirection(
-            windLegs,
-            wind.directionDeg,
-            wind.speedKmh,
-            priorities.tailwind,
-            locale
-          );
+      if (body.mode === "roundtrip") {
+        const windLegs = route.legs.map((l) => ({
+          from: l.from,
+          to: l.to,
+          distanceM: l.distanceM,
+        }));
+        const evaluation = evaluateWindDirection(
+          windLegs,
+          wind.directionDeg,
+          wind.speedKmh,
+          priorities.tailwind,
+          locale
+        );
 
-          if (evaluation.chosenDirection === "reverse") {
-            const reversedNodes = [...route.knooppunten].reverse();
-            const sequence = [body.start, ...reversedNodes, body.start];
-            const osrmLegs = await routeChain(sequence, locale);
-            route = {
-              ...route,
-              knooppunten: reversedNodes,
-              legs: toRouteLegs(sequence, osrmLegs),
-              geometry: combineGeometry(osrmLegs),
-              totalDistanceM: osrmLegs.reduce((s, l) => s + l.distanceM, 0),
-              totalDurationS: osrmLegs.reduce((s, l) => s + l.durationS, 0),
-            };
-          }
-
-          route = { ...route, wind: evaluation };
+        // evaluateWindDirection() only reports "reverse" when it's
+        // meaningfully better (not a coin-flip-close call), since re-routing
+        // the reversed sequence costs another OSRM round trip.
+        if (evaluation.chosenDirection === "reverse") {
+          const reversedNodes = [...route.knooppunten].reverse();
+          const sequence = [body.start, ...reversedNodes, body.start];
+          const osrmLegs = await routeChain(sequence, locale);
+          route = {
+            ...route,
+            knooppunten: reversedNodes,
+            legs: toRouteLegs(sequence, osrmLegs),
+            geometry: combineGeometry(osrmLegs),
+            totalDistanceM: osrmLegs.reduce((s, l) => s + l.distanceM, 0),
+            totalDurationS: osrmLegs.reduce((s, l) => s + l.durationS, 0),
+          };
         }
+
+        route = { ...route, wind: evaluation };
       }
     }
 

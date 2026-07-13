@@ -162,7 +162,15 @@
       "distance": "Distanz",
       "duration": "Fahrzeit (geschätzt)",
       "knooppunten": "Knotenpunkte",
-      "gpxExport": "GPX exportieren (Garmin / Strava)"
+      "gpxExport": "GPX exportieren (Garmin / Strava)",
+      "roadTypes": {
+        "title": "Straßentyp",
+        "loading": "Lade Straßentyp-Analyse…",
+        "cyclewayPct": "Radweg",
+        "residentialPct": "Wohnstraße",
+        "mainRoadPct": "Hauptstraße",
+        "otherPct": "Sonstige"
+      }
     },
     "alternatives": {
       "show": "5 Routen-Varianten anzeigen",

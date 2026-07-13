@@ -104,8 +104,12 @@ export function evaluateWindDirection(
   }));
   const reverseScore = weightedTailwindScore(reversed, windDirectionDeg, tailwindPriority);
 
+  // Riding the reversed sequence costs the caller an extra OSRM round trip,
+  // so require reverse to be meaningfully better, not just barely ahead on
+  // what's essentially a coin flip -- ties (and near-ties) stay "forward".
+  const REVERSE_MARGIN = 0.05;
   const chosenDirection: "forward" | "reverse" =
-    forwardScore >= reverseScore ? "forward" : "reverse";
+    reverseScore > forwardScore + REVERSE_MARGIN ? "reverse" : "forward";
 
   const compass = compassLabel(windDirectionDeg, locale);
   const speedLabel = windSpeedKmh.toFixed(0);
