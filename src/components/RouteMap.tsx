@@ -7,12 +7,15 @@ import {
   TileLayer,
   Marker,
   Polyline,
+  Polygon,
+  Circle,
   Popup,
+  ZoomControl,
   useMapEvents,
   useMap,
 } from "react-leaflet";
 import type L from "leaflet";
-import { bearing } from "@/lib/geo";
+import { bearing, destinationPoint } from "@/lib/geo";
 import { tailwindColor, tailwindComponent } from "@/lib/wind";
 import { destinationIcon, divIcon, homeIcon } from "@/lib/leafletIcons";
 import type { LatLon, POI, RoadTypeBreakdown, RoadTypeSegment, RouteLeg } from "@/lib/types";
@@ -98,6 +101,89 @@ function LegPolylines({
   );
 }
 
+function useDebounced<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+export type PlanPreview = {
+  mode: "roundtrip" | "oneway";
+  distanceKm: number;
+  direction: number | null;
+};
+
+// Mirrors the out-and-back/full-loop radius formulas and directional cone
+// width in routePlanner.ts -- duplicated here (rather than imported) since
+// that module pulls in server-side route-planning code this client preview
+// has no business bundling, but the two should stay in visual agreement.
+const ROUNDTRIP_DETOUR_FACTOR = 1.3;
+const DIRECTIONAL_CONE_HALF_WIDTH = 75;
+
+function roundTripPreviewRadiusM(distanceKm: number, hasDirection: boolean): number {
+  const targetM = distanceKm * 1000;
+  return hasDirection
+    ? targetM / (2 * ROUNDTRIP_DETOUR_FACTOR)
+    : targetM / (2 * Math.PI * ROUNDTRIP_DETOUR_FACTOR);
+}
+
+function sectorPositions(start: LatLon, direction: number, radiusM: number): [number, number][] {
+  const steps = 24;
+  const points: [number, number][] = [[start.lat, start.lon]];
+  for (let i = 0; i <= steps; i++) {
+    const b = direction - DIRECTIONAL_CONE_HALF_WIDTH + (2 * DIRECTIONAL_CONE_HALF_WIDTH * i) / steps;
+    const p = destinationPoint(start, b, radiusM);
+    points.push([p.lat, p.lon]);
+  }
+  points.push([start.lat, start.lon]);
+  return points;
+}
+
+/**
+ * Rough, purely client-side geometric preview of what a plan would search --
+ * shown as soon as a start point exists, before the user ever presses "plan
+ * route", so the app doesn't read as a blackbox that only reacts once
+ * submitted. Debounced so dragging a slider doesn't reshape the map on every
+ * tick. Not the real route (that still needs a server round trip) -- just
+ * the rough shape/reach the planner will search within.
+ */
+function LivePreviewOverlay({ start, preview }: { start: LatLon; preview: PlanPreview }) {
+  const debounced = useDebounced(preview, 250);
+
+  if (debounced.mode === "oneway") {
+    return (
+      <Circle
+        center={[start.lat, start.lon]}
+        radius={debounced.distanceKm * 1000}
+        pathOptions={{ color: "#f59e0b", weight: 2, fillOpacity: 0.08, dashArray: "6 6" }}
+      />
+    );
+  }
+
+  const hasDirection = debounced.direction !== null;
+  const radiusM = roundTripPreviewRadiusM(debounced.distanceKm, hasDirection);
+
+  if (!hasDirection) {
+    return (
+      <Circle
+        center={[start.lat, start.lon]}
+        radius={radiusM}
+        pathOptions={{ color: "#f59e0b", weight: 2, fillOpacity: 0.08, dashArray: "6 6" }}
+      />
+    );
+  }
+
+  return (
+    <Polygon
+      positions={sectorPositions(start, debounced.direction!, radiusM)}
+      pathOptions={{ color: "#f59e0b", weight: 2, fillOpacity: 0.1, dashArray: "6 6" }}
+    />
+  );
+}
+
 /** Colors each stretch of the route by its OSM road type (cycleway/residential/main road/other). */
 function RoadTypePolylines({ segments }: { segments: RoadTypeSegment[] }) {
   return (
@@ -120,7 +206,7 @@ function ColorModeToggle({
 }) {
   const t = useTranslations("planner.map");
   return (
-    <div className="absolute top-3 left-3 z-[1000] flex rounded-md overflow-hidden border border-meewind-border bg-white/90 dark:bg-zinc-900/90 text-xs shadow-md">
+    <div className="absolute top-[92px] right-3 z-[1000] flex rounded-md overflow-hidden border border-meewind-border bg-white/90 dark:bg-zinc-900/90 text-xs shadow-md">
       <button
         type="button"
         onClick={() => onChange("wind")}
@@ -146,6 +232,7 @@ export default function RouteMap({
   pois,
   wind = null,
   roadTypeSegments = [],
+  preview = null,
   destination = null,
   homeMarker = null,
   labels = { start: "Start", home: "Home", destination: "Destination" },
@@ -156,6 +243,8 @@ export default function RouteMap({
   pois: POI[];
   wind?: { directionDeg: number; speedKmh: number } | null;
   roadTypeSegments?: RoadTypeSegment[];
+  /** Rough live search-area indicator shown before a route is computed (see LivePreviewOverlay); null hides it (e.g. once a real route exists). */
+  preview?: PlanPreview | null;
   destination?: LatLon | null;
   /** Shown as a distinct house icon; used in scenic-route mode where `start` is the corridor entry station, not the rider's actual home. */
   homeMarker?: LatLon | null;
@@ -170,13 +259,21 @@ export default function RouteMap({
 
   return (
     <div className="relative h-full w-full">
-      <MapContainer center={center} zoom={8} className="h-full w-full" scrollWheelZoom>
+      <MapContainer
+        center={center}
+        zoom={8}
+        className="h-full w-full"
+        scrollWheelZoom
+        zoomControl={false}
+      >
+        <ZoomControl position="bottomright" />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ClickHandler onClick={onSetStart} />
         <RecenterOnStart start={start} />
+        {start && preview && <LivePreviewOverlay start={start} preview={preview} />}
         {start && (
           <Marker position={[start.lat, start.lon]}>
             <Popup>{labels.start}</Popup>

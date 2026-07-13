@@ -3,19 +3,15 @@
 import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
-import AddressSearch from "@/components/AddressSearch";
-import LocaleSwitcher from "@/components/LocaleSwitcher";
-import OneWayTargetPicker, { type OneWaySubMode } from "@/components/OneWayTargetPicker";
-import PlannerForm, { type AppMode } from "@/components/PlannerForm";
-import RouteAlternativesPicker from "@/components/RouteAlternativesPicker";
-import RouteSummary from "@/components/RouteSummary";
-import SignatureRoutePicker from "@/components/SignatureRoutePicker";
-import TrainReturnPanel from "@/components/TrainReturnPanel";
-import { Link } from "@/i18n/navigation";
+import PlannerPanel, { type PlannerTabKey } from "@/components/PlannerPanel";
+import PreferencesStep from "@/components/planner/PreferencesStep";
+import ResultStep from "@/components/planner/ResultStep";
+import WhereStep from "@/components/planner/WhereStep";
+import type { OneWaySubMode } from "@/components/OneWayTargetPicker";
 import { fetchPois, planRoute } from "@/lib/apiClient";
-import { LANDSCAPE_EMOJI, useLandscapeLabels } from "@/lib/scenicCorridors";
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type {
+  AppMode,
   LatLon,
   PlannedRoute,
   POI,
@@ -26,6 +22,7 @@ import type {
   ScenicRoutePlan,
   SignatureRoutePlan,
 } from "@/lib/types";
+import type { PlanPreview } from "@/components/RouteMap";
 
 const RouteMap = dynamic(() => import("@/components/RouteMap"), {
   ssr: false,
@@ -43,7 +40,6 @@ function today(): string {
 export default function PlannerPage() {
   const t = useTranslations("planner");
   const tMap = useTranslations("planner.map");
-  const landscapeLabels = useLandscapeLabels();
   const locale = useLocale();
 
   const [start, setStart] = useState<LatLon | null>(null);
@@ -71,9 +67,14 @@ export default function PlannerPage() {
   const [error, setError] = useState<string | null>(null);
   const [roadTypeSegments, setRoadTypeSegments] = useState<RoadTypeResult["segments"]>([]);
 
+  const [activeTab, setActiveTab] = useState<PlannerTabKey>("where");
+  const [collapsed, setCollapsed] = useState(false);
+
   // The core planner only knows roundtrip/oneway; "signature" is a UI-level
   // mode that always resolves to a roundtrip plan via its own endpoint.
   const mode: RouteMode = appMode === "oneway" ? "oneway" : "roundtrip";
+  const isScenicMode = appMode === "oneway" && oneWaySubMode === "scenic";
+  const hidesSubmit = isScenicMode || appMode === "signature";
 
   const canSubmit =
     appMode !== "signature" && Boolean(start) && (mode === "roundtrip" || Boolean(destination));
@@ -115,6 +116,7 @@ export default function PlannerPage() {
         locale
       );
       setRoute(planned);
+      setActiveTab("result");
       // POIs are a secondary, non-blocking overlay -- don't make the user
       // wait through another Overpass round trip before the route itself
       // (already computed) is shown.
@@ -122,6 +124,7 @@ export default function PlannerPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : t("home.routeError"));
       setRoute(null);
+      setActiveTab("result");
     } finally {
       setLoading(false);
     }
@@ -134,6 +137,7 @@ export default function PlannerPage() {
     setRoute(planned);
     setPois([]);
     setRoadTypeSegments([]);
+    setActiveTab("result");
     void loadPois(planned.geometry);
   }
 
@@ -146,6 +150,7 @@ export default function PlannerPage() {
     setRoute(result.route);
     setPois([]);
     setRoadTypeSegments([]);
+    setActiveTab("result");
     void loadPois(result.route.geometry);
   }
 
@@ -158,6 +163,7 @@ export default function PlannerPage() {
     setRoute(result.route);
     setPois([]);
     setRoadTypeSegments([]);
+    setActiveTab("result");
     void loadPois(result.route.geometry);
   }
 
@@ -190,29 +196,83 @@ export default function PlannerPage() {
       ? start
       : null;
 
+  // Rough, purely client-side search-area indicator shown before a route
+  // exists, so the map gives feedback the moment a start point is set
+  // instead of staying blank until "Route planen" is pressed. Hidden once a
+  // route is computed (the real route line speaks for itself) or in
+  // signature mode (distance there comes from the picked tour, not the
+  // slider).
+  const preview: PlanPreview | null =
+    start && !route && appMode !== "signature"
+      ? { mode, distanceKm, direction: mode === "roundtrip" ? direction : null }
+      : null;
+
+  const tabs: { key: PlannerTabKey; label: string }[] = [
+    { key: "where", label: t("tabs.where") },
+    { key: "preferences", label: t("tabs.preferences") },
+    { key: "result", label: t("tabs.result") },
+  ];
+
   return (
-    <div className="flex flex-col md:flex-row flex-1 min-h-0">
-      <aside className="order-2 md:order-1 flex flex-col gap-4 overflow-y-auto p-4 md:w-96 md:h-screen border-t md:border-t-0 md:border-r border-meewind-border">
-        <div>
-          <div className="flex items-center justify-between">
-            <Link href="/" className="text-xs text-meewind-accent hover:underline">
-              {t("backToLanding")}
-            </Link>
-            <LocaleSwitcher />
-          </div>
-          <h1 className="meewind-display text-lg mt-1">{t("header.title")}</h1>
-          <p className="text-xs text-meewind-fg-muted">{t("header.subtitle")}</p>
-        </div>
+    <div className="relative h-dvh w-full overflow-hidden">
+      <div className="absolute inset-0">
+        <RouteMap
+          start={mapStart}
+          onSetStart={handleSetStart}
+          legs={route?.legs ?? []}
+          pois={pois}
+          wind={route?.windInfo ?? null}
+          roadTypeSegments={route ? roadTypeSegments : []}
+          preview={preview}
+          destination={mapDestination}
+          homeMarker={mapHomeMarker}
+          labels={{
+            start: tMap("start"),
+            home: tMap("home"),
+            destination: tMap("destination"),
+          }}
+        />
+      </div>
 
-        <AddressSearch onSelect={handleSetStart} />
-
-        {appMode === "oneway" && start && (
-          <OneWayTargetPicker
-            start={start}
+      <PlannerPanel
+        title={t("header.title")}
+        subtitle={t("header.subtitle")}
+        backLabel={t("backToLanding")}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        collapsed={collapsed}
+        onToggleCollapsed={() => setCollapsed((c) => !c)}
+        footer={
+          !hidesSubmit && (
+            <>
+              <button
+                type="button"
+                disabled={!canSubmit || loading}
+                onClick={handleSubmit}
+                className="w-full rounded-md bg-meewind-accent py-2.5 text-sm font-medium text-meewind-accent-fg disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? t("form.submitLoading") : t("form.submit")}
+              </button>
+              {!canSubmit && submitHint && (
+                <p className="mt-1 text-xs text-meewind-fg-muted">{submitHint}</p>
+              )}
+            </>
+          )
+        }
+      >
+        {activeTab === "where" && (
+          <WhereStep
+            appMode={appMode}
+            setAppMode={handleSetAppMode}
             distanceKm={distanceKm}
+            setDistanceKm={setDistanceKm}
+            direction={direction}
+            setDirection={setDirection}
             date={date}
-            priorities={priorities}
-            avgSpeedKmh={avgSpeedKmh}
+            setDate={setDate}
+            onSetStart={handleSetStart}
+            start={start}
             destination={destination}
             destinationLabel={destinationLabel}
             onSelectDestination={(p, label) => {
@@ -222,161 +282,42 @@ export default function PlannerPage() {
             }}
             onScenicRoute={handleScenicRoute}
             onSubModeChange={setOneWaySubMode}
-          />
-        )}
-
-        {appMode === "roundtrip" && start && (
-          <RouteAlternativesPicker
-            start={start}
-            distanceKm={distanceKm}
-            date={date}
+            oneWaySubMode={oneWaySubMode}
             priorities={priorities}
-            direction={direction}
             avgSpeedKmh={avgSpeedKmh}
             poiCategories={poiCategories}
-            onPlanned={handleRouteAlternative}
-          />
-        )}
-
-        {appMode === "signature" && start && (
-          <SignatureRoutePicker
-            start={start}
-            distanceKm={distanceKm}
-            date={date}
-            priorities={priorities}
-            avgSpeedKmh={avgSpeedKmh}
+            onRouteAlternative={handleRouteAlternative}
+            onSignatureRoute={handleSignatureRoute}
             onDistanceKmChange={setDistanceKm}
-            onPlanned={handleSignatureRoute}
           />
         )}
 
-        <PlannerForm
-          appMode={appMode}
-          setAppMode={handleSetAppMode}
-          distanceKm={distanceKm}
-          setDistanceKm={setDistanceKm}
-          date={date}
-          setDate={setDate}
-          priorities={priorities}
-          setPriorities={setPriorities}
-          poiCategories={poiCategories}
-          setPoiCategories={setPoiCategories}
-          direction={direction}
-          setDirection={setDirection}
-          avgSpeedKmh={avgSpeedKmh}
-          setAvgSpeedKmh={setAvgSpeedKmh}
-          onSubmit={handleSubmit}
-          loading={loading}
-          canSubmit={canSubmit}
-          submitHint={submitHint}
-          oneWaySubMode={appMode === "oneway" ? oneWaySubMode : undefined}
-        />
-
-        {error && (
-          <div className="rounded-md bg-red-950/40 p-2 text-xs text-red-300 whitespace-pre-wrap break-words">
-            {error}
-          </div>
+        {activeTab === "preferences" && (
+          <PreferencesStep
+            priorities={priorities}
+            setPriorities={setPriorities}
+            avgSpeedKmh={avgSpeedKmh}
+            setAvgSpeedKmh={setAvgSpeedKmh}
+            poiCategories={poiCategories}
+            setPoiCategories={setPoiCategories}
+          />
         )}
 
-        {scenicPlan && (
-          <div className="rounded-md border border-meewind-border p-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="font-medium">{scenicPlan.corridor.name}</span>
-              <span className="text-xs text-meewind-fg-muted">
-                {LANDSCAPE_EMOJI[scenicPlan.corridor.landscapeType]}{" "}
-                {landscapeLabels[scenicPlan.corridor.landscapeType]}
-              </span>
-            </div>
-            <p className="text-xs text-meewind-fg-muted mt-1">
-              {scenicPlan.corridor.description}
-            </p>
-          </div>
+        {activeTab === "result" && (
+          <ResultStep
+            route={route}
+            pois={pois}
+            error={error}
+            mode={mode}
+            start={start}
+            date={date}
+            destination={destination}
+            scenicPlan={scenicPlan}
+            signaturePlan={signaturePlan}
+            onRoadTypeSegments={setRoadTypeSegments}
+          />
         )}
-
-        {signaturePlan && (
-          <div className="rounded-md border border-meewind-border p-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="font-medium">{signaturePlan.signatureRoute.name}</span>
-              <span className="text-xs text-meewind-fg-muted">
-                {LANDSCAPE_EMOJI[signaturePlan.signatureRoute.landscapeType]}{" "}
-                {landscapeLabels[signaturePlan.signatureRoute.landscapeType]}
-              </span>
-            </div>
-            <p className="text-xs text-meewind-fg-muted mt-1">
-              {signaturePlan.signatureRoute.description}
-            </p>
-            <p className="text-xs text-meewind-fg-muted mt-1">
-              {signaturePlan.usedStation
-                ? t("home.signatureStationHint", { station: signaturePlan.station?.name ?? "" })
-                : t("home.signatureDirectHint")}
-            </p>
-          </div>
-        )}
-
-        {route && (
-          <RouteSummary route={route} pois={pois} onRoadTypeSegments={setRoadTypeSegments} />
-        )}
-
-        {scenicPlan && (
-          <>
-            <TrainReturnPanel
-              home={start ?? scenicPlan.entryStation}
-              dest={scenicPlan.entryStation}
-              date={date}
-              title={t("home.scenicOutboundTitle")}
-              preloaded={scenicPlan.outboundTrain}
-            />
-            <TrainReturnPanel
-              home={start ?? scenicPlan.entryStation}
-              dest={scenicPlan.exitStation}
-              date={date}
-              title={t("home.scenicReturnTitle")}
-              preloaded={scenicPlan.returnTrain}
-            />
-          </>
-        )}
-
-        {signaturePlan?.usedStation && signaturePlan.station && signaturePlan.outboundTrain && (
-          <>
-            <TrainReturnPanel
-              home={start ?? signaturePlan.station}
-              dest={signaturePlan.station}
-              date={date}
-              title={t("home.signatureOutboundTitle")}
-              preloaded={signaturePlan.outboundTrain}
-            />
-            <TrainReturnPanel
-              home={start ?? signaturePlan.station}
-              dest={signaturePlan.station}
-              date={date}
-              title={t("home.signatureReturnTitle")}
-              preloaded={signaturePlan.returnTrain ?? undefined}
-            />
-          </>
-        )}
-
-        {!scenicPlan && route && mode === "oneway" && start && destination && (
-          <TrainReturnPanel home={start} dest={destination} date={date} />
-        )}
-      </aside>
-
-      <main className="order-1 md:order-2 flex-1 h-[50vh] md:h-screen">
-        <RouteMap
-          start={mapStart}
-          onSetStart={handleSetStart}
-          legs={route?.legs ?? []}
-          pois={pois}
-          wind={route?.windInfo ?? null}
-          roadTypeSegments={route ? roadTypeSegments : []}
-          destination={mapDestination}
-          homeMarker={mapHomeMarker}
-          labels={{
-            start: tMap("start"),
-            home: tMap("home"),
-            destination: tMap("destination"),
-          }}
-        />
-      </main>
+      </PlannerPanel>
     </div>
   );
 }

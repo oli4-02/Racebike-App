@@ -96,6 +96,14 @@
       "title": "Meewind Planner",
       "subtitle": "Kies een startpunt, stel de afstand in — Meewind plant de windgeoptimaliseerde route langs het knooppuntennetwerk."
     },
+    "tabs": {
+      "where": "Waar & hoe ver",
+      "preferences": "Voorkeuren",
+      "result": "Resultaat"
+    },
+    "result": {
+      "empty": "Nog geen route gepland. Vul de andere stappen in en klik op \"Route plannen\"."
+    },
     "addressSearch": {
       "startLabel": "Startadres",
       "startPlaceholder": "bijv. Utrecht, Domplein",

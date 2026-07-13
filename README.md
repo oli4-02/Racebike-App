@@ -105,6 +105,105 @@ Planer nutzen dieselben Klassen (`bg-meewind-bg`, `text-meewind-accent`,
 Schriften (Archivo, IBM Plex Sans) werden über `next/font/google` in
 `src/app/[locale]/layout.tsx` geladen.
 
+### Planer-UI: Karte als Hauptbühne, gestuftes Panel statt langer Formular-Liste
+
+Die Planer-Seite (`src/app/[locale]/planner/page.tsx`) war ursprünglich eine
+feste linke Sidebar (alle Formularfelder + Ergebnis untereinander) neben
+einer 50/50-Karte. Das ist durch ein Google-Maps/Komoot-artiges Layout
+ersetzt: die Karte (`RouteMap`) füllt den kompletten Viewport
+(`absolute inset-0`), darüber schwebt ein kompaktes, einklappbares Panel
+(`PlannerPanel.tsx`) — auf schmalen Viewports als Bottom-Sheet (`fixed
+inset-x-0 bottom-0`, ~82vh hoch), auf breiteren als Karte oben links
+(`md:top-4 md:left-4 md:w-[380px]`). Einklappen schrumpft in beiden Fällen
+nur auf die Header-Zeile (nie die Breite), sodass dieselbe Klassenlogik für
+beide Breakpoints reicht.
+
+Der Panel-Inhalt ist in drei Tabs gegliedert (nicht mehr eine lange Liste
+untereinander):
+- **Wo & wie weit** (`WhereStep.tsx`) — Start, Tourtyp, Distanz, Richtung,
+  Datum, sowie je nach Modus der Ziel-/Korridor-/Signature-Picker und (bei
+  Rundtour) die 5-Varianten-Auswahl
+- **Deine Vorlieben** (`PreferencesStep.tsx`) — Prioritäten-Radar,
+  Ø-Geschwindigkeit, POI-Kategorien
+- **Ergebnis** (`ResultStep.tsx`) — Fehleranzeige, Korridor-/Signature-Info,
+  `RouteSummary`, Zugverbindungen
+
+Der "Route planen"-Button lebt als fester Footer im Panel-Rahmen (in allen
+Tabs außer "Ergebnis" sichtbar, außer bei Landschafts-/Signature-Route, die
+direkt bei Auswahl planen); jede erfolgreiche Planung springt automatisch in
+den "Ergebnis"-Tab. Diese drei Tab-Inhalte und der Footer bleiben in
+`page.tsx` zusammengesetzt, `PlannerPanel` selbst ist reine Hülle
+(Header/Tabs/Collapse/Footer-Slot) ohne eigenes Domänenwissen.
+
+`PlannerForm.tsx` und `PrioritySliders.tsx` sind komplett entfernt — ihr
+Inhalt lebt jetzt in `WhereStep.tsx`/`PreferencesStep.tsx`, `AppMode` ist
+nach `lib/types.ts` gewandert (dort ohnehin schon `RouteMode` definiert).
+
+**Wichtige Falle beim Bauen des Panels**: die Kopfzeile war zunächst selbst
+ein `<button>` (klickbar zum Ein-/Ausklappen), das einen `Link` (Zurück zur
+Startseite) und `LocaleSwitcher` (eigene `<button>`s) enthielt — ein
+`<button>` darf aber keine anderen interaktiven Elemente enthalten
+(HTML-Spezifikation); Browser räumen das ungültige Markup beim Parsen
+still um, wodurch das clientseitig gerenderte DOM nicht mehr zum
+serverseitigen passte (React-Hydration-Fehler #418) und das Panel nach dem
+ersten Klick sichtbar kaputtging. Behoben, indem die Kopfzeile ein normales
+`<div onClick=…>` ist und der Ein-/Ausklapp-Button ein eigenständiges,
+nicht verschachteltes `<button>` daneben.
+
+#### Eigene UI-Komponenten statt native Browser-Defaults
+
+- `src/components/ui/Slider.tsx` — Verlaufs-gefüllte Spur (CSS-Custom-Property
+  `--slider-pct`, damit der Fortschritt ohne JS-Zugriff auf Pseudo-Elemente
+  gesetzt werden kann) und großer, farbiger Griff, browserübergreifend via
+  `::-webkit-slider-*`- und `::-moz-range-*`-Pseudo-Elementen gestylt
+- `src/components/ui/Select.tsx` — `<select>` bleibt nativ (Tastatur-/
+  Screenreader-/Mobile-Verhalten eines selbstgebauten Listbox-Widgets ist ein
+  echtes Accessibility- und iOS-Safari-Minenfeld), nur Chrome/Pfeil-Icon und
+  Rahmen sind eigenständig gestaltet (`appearance-none` + eigenes SVG-Chevron)
+- `src/components/ui/DateField.tsx` — nativer Date-Input bleibt aus demselben
+  Grund erhalten, aber mit eigenem Icon/Rahmen/Fokus-Ring; Klick irgendwo im
+  Feld öffnet den nativen Picker über `showPicker()` (mit Feature-Detection,
+  da nicht in jedem Browser verfügbar)
+
+#### Prioritäten als Radar-Diagramm statt fünf Slidern
+
+`src/components/PriorityRadar.tsx` ersetzt die fünf einzelnen Prozent-Slider
+durch ein interaktives SVG-Fünfeck-Diagramm — die Balance zwischen den
+Prioritäten ist auf einen Blick sichtbar (Fläche/Form des Polygons) statt
+fünf Zahlen vergleichen zu müssen. Jede Ecke lässt sich per Maus/Touch
+ziehen; da eine Ecke nur sinnvoll entlang ihrer eigenen Achse wandern kann
+(Standardverhalten editierbarer Radar-Charts), projiziert das Drag-Handling
+die Zeigerposition per Skalarprodukt auf die feste Achsrichtung statt dem
+Zeiger frei zu folgen. Nutzt die Pointer-Capture-API (`setPointerCapture`),
+damit ein Drag auch dann weiterläuft, wenn der Zeiger kurz den Handle
+verlässt — keine zusätzliche Drag-Bibliothek nötig. Lange Labels
+("Wenig Ampeln/Kreuzungen") brechen am "/" auf zwei Zeilen um, sonst würden
+sie bei den seitlichen Achsen weit über den Diagrammrand hinausragen.
+
+#### Live-Kartenvorschau statt Blackbox bis zum Klick auf "Route planen"
+
+Sobald ein Startpunkt gesetzt ist, zeigt die Karte sofort einen groben,
+rein clientseitig berechneten Suchbereich (`LivePreviewOverlay` in
+`RouteMap.tsx`): bei Rundtour ohne Richtung ein Kreis (Radius nach derselben
+Vollkreis-Formel wie serverseitig, siehe `roundTripPreviewRadiusM`), mit
+Richtung ein ±75°-Sektor (Fächer) in die gewählte Richtung, bei One-Way ein
+Kreis mit dem eingestellten Such-Radius. Änderungen an Distanz/Richtung
+werden 250ms debounced, damit ein Slider-Drag die Karte nicht bei jedem
+Tick neu zeichnet. Bewusste Vereinfachung: Prioritäten-Änderungen lösen
+keine sichtbare Formänderung aus (sie verändern die Suchgeometrie nicht,
+nur die Kandidaten-Bewertung) — es gibt also keinen ehrlichen visuellen
+Effekt dafür, und einen künstlichen vorzutäuschen wäre irreführender als
+ihn wegzulassen. Die Vorschau blendet sich aus, sobald eine echte Route
+berechnet wurde (die farbige Routenlinie ist dann aussagekräftiger) oder im
+Signature-Modus (dort kommt die Distanz aus der gewählten Tour, nicht aus
+dem Slider).
+
+Die Kartensteuerelemente mussten dafür neu angeordnet werden, damit nichts
+hinter dem jetzt schwebenden Panel verschwindet: Leaflets Zoom-Control liegt
+jetzt unten rechts (`zoomControl={false}` + eigene `<ZoomControl
+position="bottomright">`) statt oben links, und der Straßentyp-Umschalter
+sitzt oben rechts unterhalb des Wind-Kompass-Overlays statt oben links.
+
 ### Mehrsprachigkeit (DE/EN/NL)
 
 [next-intl](https://next-intl.dev) mit Locale-Routing (`de` als Default ohne

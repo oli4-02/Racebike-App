@@ -19,6 +19,9 @@ export type POI = {
 
 export type RouteMode = "roundtrip" | "oneway";
 
+/** UI-level tour type: "signature" is a third planner-page mode that always resolves to a roundtrip plan via its own endpoint. */
+export type AppMode = "roundtrip" | "oneway" | "signature";
+
 /**
  * User-weighted criteria (0..1 each, independent — not required to sum to 1)
  * that bias knooppunt selection away from the pure distance-matching

@@ -96,6 +96,14 @@
       "title": "Meewind Planner",
       "subtitle": "Pick a start point, set your distance — Meewind plans the wind-optimized route along the node network."
     },
+    "tabs": {
+      "where": "Where & how far",
+      "preferences": "Preferences",
+      "result": "Result"
+    },
+    "result": {
+      "empty": "No route planned yet. Fill in the other steps and click \"Plan route\"."
+    },
     "addressSearch": {
       "startLabel": "Start address",
       "startPlaceholder": "e.g. Utrecht, Domplein",

@@ -96,6 +96,14 @@
       "title": "Meewind Planer",
       "subtitle": "Startpunkt wählen, Distanz einstellen — Meewind plant die windoptimierte Route entlang des Fietsknooppuntennetzes."
     },
+    "tabs": {
+      "where": "Wo & wie weit",
+      "preferences": "Vorlieben",
+      "result": "Ergebnis"
+    },
+    "result": {
+      "empty": "Noch keine Route geplant. Fülle die anderen Schritte aus und klicke auf „Route planen“."
+    },
     "addressSearch": {
       "startLabel": "Startadresse",
       "startPlaceholder": "z.B. Utrecht, Domplein",
