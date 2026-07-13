@@ -165,20 +165,98 @@ nicht verschachteltes `<button>` daneben.
   Feld öffnet den nativen Picker über `showPicker()` (mit Feature-Detection,
   da nicht in jedem Browser verfügbar)
 
-#### Prioritäten als Radar-Diagramm statt fünf Slidern
+#### Prioritäten-Presets statt Radar-Diagramm
 
-`src/components/PriorityRadar.tsx` ersetzt die fünf einzelnen Prozent-Slider
-durch ein interaktives SVG-Fünfeck-Diagramm — die Balance zwischen den
-Prioritäten ist auf einen Blick sichtbar (Fläche/Form des Polygons) statt
-fünf Zahlen vergleichen zu müssen. Jede Ecke lässt sich per Maus/Touch
-ziehen; da eine Ecke nur sinnvoll entlang ihrer eigenen Achse wandern kann
-(Standardverhalten editierbarer Radar-Charts), projiziert das Drag-Handling
-die Zeigerposition per Skalarprodukt auf die feste Achsrichtung statt dem
-Zeiger frei zu folgen. Nutzt die Pointer-Capture-API (`setPointerCapture`),
-damit ein Drag auch dann weiterläuft, wenn der Zeiger kurz den Handle
-verlässt — keine zusätzliche Drag-Bibliothek nötig. Lange Labels
-("Wenig Ampeln/Kreuzungen") brechen am "/" auf zwei Zeilen um, sonst würden
-sie bei den seitlichen Achsen weit über den Diagrammrand hinausragen.
+Das ursprüngliche Radar-Diagramm (`PriorityRadar.tsx`, mittlerweile entfernt)
+war zwar auf einen Blick lesbar, aber für die meisten Nutzer zu abstrakt —
+man musste erst verstehen, was ein verzerrtes Fünfeck bedeutet, bevor man es
+sinnvoll anpassen konnte. `PreferencesStep.tsx` zeigt stattdessen vier große,
+klar beschriftete Preset-Kacheln ("Ruhig & Natur", "Schnell & direkt",
+"Café-Tour", "Maximaler Rückenwind"), jede mit sinnvoll vorbelegten
+Prioritäts-Werten für die vier Regler-Dimensionen (Ampeln/Kreuzungen, Natur,
+kürzeste Zeit, Rückenwind) — ein Klick genügt. Darunter liegt ein
+eingeklappter "Feinjustieren"-Bereich mit den vier Einzel-Reglern für alle,
+die manuell justieren wollen. Presets und Regler teilen sich denselben
+`priorities`-State (keine gespiegelte Kopie): eine Kachel schreibt direkt in
+die Regler-Werte, und `isActivePreset()` vergleicht bei jedem Render, ob die
+aktuellen Regler-Werte exakt einem der vier Presets entsprechen — trifft das
+zu, wird die passende Kachel hervorgehoben, sonst keine (manuell abweichende
+Werte gelten als "eigene Einstellung", ohne aktive Kachel). Dadurch bleiben
+Kacheln und Feinjustierung immer konsistent, unabhängig davon, in welcher
+Reihenfolge der Nutzer sie bedient.
+
+### "Stopps planen": gezielte POI-Suche pro Streckenabschnitt
+
+Die bisherige generische "Viele Cafés/POIs"-Priorität (`poiDensity`) wurde
+aus der UI entfernt und beeinflusst die Routenwahl (`scoreCandidate()` in
+`routePlanner.ts`) nicht mehr — sie war zu unspezifisch ("irgendwo mehr
+POIs am Wegesrand" statt "ich will an einem bestimmten Punkt der Tour
+einen Kaffee trinken"). Stattdessen kann der Nutzer im "Vorlieben"-Tab
+1–3 konkrete Stopps definieren (`StopRequest` in `types.ts`): pro Stopp ein
+Kategorie-Dropdown (Café/Eisdiele/Supermarkt/Tankstelle) und ein
+Doppelgriff-Streckenanteil-Slider (`RangeSlider.tsx`, z. B. 40–60 %) —
+bewusst als Prozent-Spanne der Gesamtstrecke, nicht als fixe km-Angabe, da
+sich die tatsächliche Distanz durch Knotenpunkt-Rundung noch leicht
+verschieben kann.
+
+Sobald eine Route berechnet ist, filtert `StopCandidates.tsx` die bereits
+für die Route geladenen POIs (kein zusätzlicher Overpass-Request) auf
+genau das Streckenanteil-Fenster jedes Stopps: `routeFraction()` (in
+`geo.ts`) ermittelt dafür den nächstgelegenen Routen-Vertex zu einem POI
+und teilt dessen kumulierte Distanz entlang der Route durch die
+Gesamtlänge (0–1) — eine Näherung über den nächsten Vertex, keine exakte
+Projektion auf das Liniensegment. Die bis zu 4 Kandidaten je Stopp, die dem
+Fenster-Mittelpunkt am nächsten liegen, werden zur Auswahl angezeigt; die
+Wahl des Nutzers erscheint auf der Karte mit einem eigenen Stern-Marker
+und wird beim GPX-Export mit "⭐ " im Namen hervorgehoben. Die einfachen
+POI-Kategorie-Toggle (Kartenmarker-Anzeige) bleiben unverändert bestehen,
+sind aber bewusst unabhängig von der Stopp-Planung — ein Toggle steuert nur
+die Sichtbarkeit auf der Karte, ein Stopp steuert die gezielte Suche.
+
+### "Große Straßen vermeiden": Best-Effort-Ausschluss statt Gewichtung
+
+Ein Schalter im "Vorlieben"-Tab schließt beim Aktivieren die OSM-Straßen-
+klassen `primary`, `trunk`, `secondary` (und ihre `_link`-Varianten) aus der
+Route aus — hart, nicht nur schwächer gewichtet. Das öffentliche
+`routed-bike`-OSRM-Profil auf `routing.openstreetmap.de` kennt aber, anders
+als ein Auto-Profil (z. B. Maut/Autobahn/Fähre bei `car.lua`), kein
+Konzept "ausschließbarer Straßenklassen" für Räder — ein einfacher
+`exclude=`-Parameter in der Anfrage funktioniert dafür also nicht, das
+Profil passt nur Geschwindigkeit/Priorität pro `highway`-Tag an, ohne harte
+Sperrmöglichkeit. Meewind löst das stattdessen mit **Erkennen-und-Umfahren**
+(`avoidExcludedRoads()` in `routePlanner.ts`): nach dem Routing jedes
+Teilstücks prüft `legCrossesExcludedRoad()` (in `overpass.ts`) per
+schmaler Overpass-Abfrage (20m-Korridor entlang bis zu 20 Sample-Punkten
+der Teilstück-Geometrie), ob eine der drei Klassen dort verläuft. Falls ja,
+wird aus dem noch unbenutzten Knotenpunkt-Pool der nächstgelegene Kandidat
+zum Mittelpunkt des betroffenen Teilstücks als zusätzlicher Wegpunkt
+eingefügt und die komplette Sequenz neu geroutet — bis zu 4 Durchläufe
+(`MAX_AVOID_MAIN_ROAD_PASSES`), danach wird die zuletzt erreichte Route
+übernommen, auch wenn sie noch eine Hauptstraßen-Querung enthält. Das ist
+bewusst gegenüber der Kandidaten-Auswahl im großen Suchradius abgegrenzt:
+ein einzelner Overpass-Vorab-Check über die gesamte Suchfläche (bis zu 70km
+bei richtungsgebundenen Rundtouren) wäre wegen der Geometrie-Größe aller
+Haupt-/Landstraßen im Gebiet unpraktikabel teuer; stattdessen greift der
+Mechanismus günstig und gezielt nur auf die tatsächlich gewählten
+Teilstücke zu, verändert aber dadurch effektiv auch, welche Knotenpunkte am
+Ende in der Route landen.
+
+**Bekannte Einschränkung**: Dieser Mechanismus ist Best-Effort, keine
+mathematische Garantie — analog zum bestehenden Anti-Stadt-Bias (siehe
+unten) gibt es keine harte Routing-Sperre auf OSRM-Ebene, sondern eine
+begrenzte Zahl an Nachbesserungs-Durchläufen basierend auf Overpass-Daten.
+In sehr dicht mit Hauptstraßen durchzogenen Gebieten oder wenn der
+Knotenpunkt-Pool keinen geeigneten Ausweich-Kandidaten mehr bietet, kann
+eine kurze Hauptstraßen-Querung bestehen bleiben.
+
+### GPX-Export: Navigations-Hinweis statt Google-Maps-Export
+
+Ein Google-Maps-Export für GPX-Tracks wurde bewusst nicht umgesetzt: Google
+Maps stellt importierte GPX-Tracks nur als Linie ohne Turn-by-Turn-Navigation
+dar, wäre für den eigentlichen Zweck (Navigation während der Fahrt) also
+irreführend gewesen. Stattdessen zeigt `RouteSummary.tsx` direkt neben dem
+GPX-Export-Button einen kurzen Hinweistext, der stattdessen kostenlose Apps
+mit echtem GPX-Turn-by-Turn (OsmAnd, Organic Maps) empfiehlt.
 
 #### Live-Kartenvorschau statt Blackbox bis zum Klick auf "Route planen"
 
@@ -235,8 +313,8 @@ Signature-Route), nicht als das Ranking-Kriterium selbst.
 
 ### Mehrsprachigkeit (DE/EN/NL)
 
-[next-intl](https://next-intl.dev) mit Locale-Routing (`de` als Default ohne
-Präfix, `/en`, `/nl`); Konfiguration in `src/i18n/routing.ts` /
+[next-intl](https://next-intl.dev) mit Locale-Routing (`nl` als Default ohne
+Präfix, `/en`, `/de`); Konfiguration in `src/i18n/routing.ts` /
 `src/i18n/request.ts`, Übersetzungen in `messages/{de,en,nl}.json`
 (Namespaces: `meta`, `nav`, `landing`, `planner`, `api`).
 
@@ -499,17 +577,20 @@ Es gibt keinen vollständigen gewichteten Shortest-Path über das komplette
 Knooppunten-Netz (das wäre ein deutlich größeres Projekt) — stattdessen
 fließen die Regler in die bestehende Sektor-/Schritt-Heuristik ein:
 
-- **Wenig Ampeln**, **viel Natur/Wasser**, **viele Cafés/POIs**: Für jeden
-  Kandidaten-Knotenpunkt werden einmalig Overpass-Querys über Ampeln/
-  Kreuzungen, Wasser/Wald, Cafés/Eisdielen sowie `tourism=*`/`historic=*`-Tags
-  im Suchradius geladen. "Natur/Wasser" kombiniert dabei eine Dichte-Zählung
+- **Wenig Ampeln**, **viel Natur/Wasser**: Für jeden Kandidaten-Knotenpunkt
+  werden einmalig Overpass-Querys über Ampeln/Kreuzungen sowie Wasser/Wald im
+  Suchradius geladen. "Natur/Wasser" kombiniert dabei eine Dichte-Zählung
   (Wasser+Wald im Umkreis) mit einer Distanz-Zerfallsfunktion zum nächsten
   Wasser-Feature — dieselbe Formel wie beim Attraktivitäts-Score der
-  Zielvorschläge (siehe unten). "Cafés/POIs" kombiniert analog Café/
-  Eisdielen-Dichte mit Sehenswürdigkeiten-Dichte. So bevorzugt die Route
-  Wasser/Sehenswürdigkeiten in der Nähe, ohne dass die Distanz-Passung (die
-  immer mit Basisgewicht 1 einfließt) dafür einen großen Umweg zulässt — die
-  Werte fließen direkt in die Kandidaten-Bewertung pro Sektor/Schritt ein.
+  Zielvorschläge (siehe unten). So bevorzugt die Route Wasser in der Nähe,
+  ohne dass die Distanz-Passung (die immer mit Basisgewicht 1 einfließt)
+  dafür einen großen Umweg zulässt — die Werte fließen direkt in die
+  Kandidaten-Bewertung pro Sektor/Schritt ein. Café-/Eisdielen-/Sehenswürdig-
+  keiten-Dichte (`poiScore`) wird weiterhin geladen und beeinflusst intern
+  noch `pickHighlight()`s Klassifikation "poiRich" bei den 5 Routen-Varianten,
+  fließt aber seit der Einführung der gezielten "Stopps planen"-Funktion
+  (siehe oben) nicht mehr in `scoreCandidate()` und damit nicht mehr in die
+  eigentliche Knotenpunkt-Auswahl ein.
 - **Kürzeste Zeit**: erhöht das Gewicht der Distanz-Passung gegenüber den
   anderen Kriterien und reduziert die Anzahl der Zwischenstopps (weniger
   Umwege) sowie – bei One-Way – den erlaubten Umweg-Faktor zum Ziel.
@@ -646,6 +727,15 @@ eigenen Zuhause, sondern am Korridor selbst:
   Sample-Punkts liegen — bei sehr grob digitalisierten Wegen oder Lücken in
   den OSM-Daten kann ein Abschnitt daher als "Sonstige" statt korrekt
   klassifiziert erscheinen.
+- "Große Straßen vermeiden" ist Erkennen-und-Umfahren nach dem Routing, keine
+  harte OSRM-Sperre (siehe oben) — bei sehr dichtem Hauptstraßennetz oder
+  einem knappen Knotenpunkt-Pool kann nach den maximal 4 Nachbesserungs-
+  Durchläufen noch eine kurze Querung übrig bleiben.
+- `routeFraction()` für die "Stopps planen"-Fensterfilterung ordnet einen POI
+  dem nächstgelegenen Routen-Vertex zu, nicht der exakten Projektion auf das
+  Liniensegment — bei sehr groben Routen-Geometrien (wenige Vertices auf
+  einem langen, geraden Teilstück) kann der berechnete Streckenanteil daher
+  leicht von der tatsächlichen Position abweichen.
 
 ## Setup
 

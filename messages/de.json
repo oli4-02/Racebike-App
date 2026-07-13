@@ -139,6 +139,19 @@
       "poiSupermarket": "🛒 Supermarkt",
       "poiIceCream": "🍦 Eisdiele",
       "poiCafe": "☕ Café",
+      "stops": {
+        "title": "Stopps planen",
+        "hint": "Lege bis zu 3 gewünschte Stopps fest — z. B. \"irgendwo zwischen 40 % und 60 % der Strecke ein Café\". Nach der Routenberechnung schlagen wir dir die besten Treffer im jeweiligen Streckenabschnitt vor.",
+        "stopLabel": "Stopp {n}",
+        "remove": "Stopp entfernen",
+        "rangeLabel": "Streckenanteil",
+        "noneFound": "Kein passender Stopp in diesem Streckenabschnitt gefunden.",
+        "add": "+ Stopp hinzufügen"
+      },
+      "avoidMainRoads": {
+        "label": "Große Straßen vermeiden",
+        "hint": "Schließt Haupt-/Landstraßen (primary, trunk, secondary) konsequent aus der Route aus, nicht nur schwächer gewichtet."
+      },
       "direction": "Richtung",
       "directionHint": "Bestimmt eine Richtung, um eher hinaus aufs Land zu fahren statt im Kreis um den Startpunkt.",
       "directions": {
@@ -165,15 +178,34 @@
       "title": "Prioritäten",
       "fewTrafficLights": "Wenig Ampeln/Kreuzungen",
       "nature": "Viel Natur/Wasser",
-      "poiDensity": "Viele Cafés/POIs",
       "shortestTime": "Kürzeste Zeit",
-      "tailwind": "Maximaler Rückenwind"
+      "tailwind": "Maximaler Rückenwind",
+      "fineTune": "Feinjustieren",
+      "presets": {
+        "quietNature": {
+          "title": "Ruhig & Natur",
+          "subtitle": "Wenig Verkehr, viel Grün und Wasser"
+        },
+        "fastDirect": {
+          "title": "Schnell & direkt",
+          "subtitle": "Kürzeste Zeit, wenig Umwege"
+        },
+        "cafeTour": {
+          "title": "Café-Tour",
+          "subtitle": "Entspanntes Tempo für Stopps unterwegs"
+        },
+        "maxTailwind": {
+          "title": "Maximaler Rückenwind",
+          "subtitle": "Windrichtung hat oberste Priorität"
+        }
+      }
     },
     "summary": {
       "distance": "Distanz",
       "duration": "Fahrzeit (geschätzt)",
       "knooppunten": "Knotenpunkte",
       "gpxExport": "GPX exportieren (Garmin / Strava)",
+      "gpxExportHint": "Für Turn-by-Turn-Navigation empfehlen wir kostenlose Apps wie OsmAnd oder Organic Maps (beide unterstützen GPX-Import mit Sprachnavigation) statt Google Maps, das GPX-Tracks nur als Linie anzeigt, ohne Navigation.",
       "roadTypes": {
         "title": "Straßentyp",
         "loading": "Lade Straßentyp-Analyse…",

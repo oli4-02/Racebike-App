@@ -17,6 +17,20 @@ export type POI = {
   lon: number;
 };
 
+/**
+ * A rider-requested stop: "somewhere between rangeStartPct and rangeEndPct
+ * of the total route, find me a POI of this category." Expressed as a
+ * distance fraction rather than an absolute km mark since the actual route
+ * distance can shift (refine loop, alternatives, presets) after the stop is
+ * configured.
+ */
+export type StopRequest = {
+  id: string;
+  category: POICategory;
+  rangeStartPct: number; // 0-100
+  rangeEndPct: number; // 0-100
+};
+
 export type RouteMode = "roundtrip" | "oneway";
 
 /** UI-level tour type: "signature" is a third planner-page mode that always resolves to a roundtrip plan via its own endpoint. */
@@ -73,6 +87,15 @@ export type PlanRequest = {
    * estimate.
    */
   avgSpeedKmh?: number;
+  /**
+   * Hard-excludes primary/trunk/secondary roads (and their _link variants)
+   * from the route -- not just a lower weight, an actual reroute-until-clear
+   * pass after each leg is computed. See routePlanner.ts's
+   * avoidExcludedRoads() for how (the public OSRM bike profile doesn't
+   * support excluding road classes via a request parameter, so this is
+   * detect-and-insert-a-waypoint-then-recheck, not a single routing flag).
+   */
+  avoidMainRoads?: boolean;
   /** UI language, used to localize wind explanations, POI labels, and error messages generated server-side. Defaults to "de". */
   locale?: string;
 };

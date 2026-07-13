@@ -79,6 +79,37 @@ export function polylineLength(points: LatLon[]): number {
 }
 
 /**
+ * Where a point falls along a route, as a 0-1 fraction of the route's total
+ * length -- matches the point to its nearest route vertex and divides the
+ * cumulative distance up to that vertex by the route's total length. Used
+ * to check whether a POI falls within a rider-requested "stop somewhere
+ * between X% and Y% of the ride" window. Approximate (nearest-vertex, not a
+ * true projection onto the route's line segments) but that's within the
+ * precision a route-fraction request needs.
+ */
+export function routeFraction(point: LatLon, route: LatLon[]): number {
+  if (route.length < 2) return 0;
+
+  const cumulative: number[] = [0];
+  for (let i = 1; i < route.length; i++) {
+    cumulative.push(cumulative[i - 1] + distance(route[i - 1], route[i]));
+  }
+  const totalM = cumulative[cumulative.length - 1];
+  if (totalM === 0) return 0;
+
+  let nearestIndex = 0;
+  let nearestDist = Infinity;
+  for (let i = 0; i < route.length; i++) {
+    const d = distance(point, route[i]);
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearestIndex = i;
+    }
+  }
+  return cumulative[nearestIndex] / totalM;
+}
+
+/**
  * Synthesizes a circular loop of the given circumference around a center
  * point — not a real route, just an illustrative preview of the area and
  * rough size (used for signature-route cards, where computing an actual

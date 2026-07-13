@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import RouteSummary from "@/components/RouteSummary";
 import TrainReturnPanel from "@/components/TrainReturnPanel";
+import StopCandidates from "@/components/planner/StopCandidates";
 import { LANDSCAPE_EMOJI, useLandscapeLabels } from "@/lib/scenicCorridors";
 import type {
   LatLon,
@@ -12,11 +13,13 @@ import type {
   RouteMode,
   ScenicRoutePlan,
   SignatureRoutePlan,
+  StopRequest,
 } from "@/lib/types";
 
 export default function ResultStep({
   route,
   pois,
+  selectedStopPois,
   error,
   mode,
   start,
@@ -25,9 +28,13 @@ export default function ResultStep({
   scenicPlan,
   signaturePlan,
   onRoadTypeSegments,
+  stopRequests,
+  selectedStopPoiIds,
+  onSelectStopPoi,
 }: {
   route: PlannedRoute | null;
   pois: POI[];
+  selectedStopPois: POI[];
   error: string | null;
   mode: RouteMode;
   start: LatLon | null;
@@ -36,6 +43,9 @@ export default function ResultStep({
   scenicPlan: ScenicRoutePlan | null;
   signaturePlan: SignatureRoutePlan | null;
   onRoadTypeSegments: (segments: RoadTypeResult["segments"]) => void;
+  stopRequests: StopRequest[];
+  selectedStopPoiIds: Record<string, number>;
+  onSelectStopPoi: (stopId: string, poiId: number) => void;
 }) {
   const t = useTranslations("planner");
   const landscapeLabels = useLandscapeLabels();
@@ -82,9 +92,24 @@ export default function ResultStep({
       )}
 
       {route ? (
-        <RouteSummary route={route} pois={pois} onRoadTypeSegments={onRoadTypeSegments} />
+        <RouteSummary
+          route={route}
+          pois={pois}
+          extraWaypoints={selectedStopPois}
+          onRoadTypeSegments={onRoadTypeSegments}
+        />
       ) : (
         !error && <p className="text-xs text-meewind-fg-muted">{t("result.empty")}</p>
+      )}
+
+      {route && (
+        <StopCandidates
+          route={route}
+          pois={pois}
+          stopRequests={stopRequests}
+          selectedStopPoiIds={selectedStopPoiIds}
+          onSelectStopPoi={onSelectStopPoi}
+        />
       )}
 
       {scenicPlan && (

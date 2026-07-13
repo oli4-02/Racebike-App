@@ -1,7 +1,7 @@
 import type { AppLocale } from "@/i18n/routing";
 import { bearing, distance, angleDiff } from "./geo";
 import { ROUTE_PLANNER_STRINGS } from "./i18nStrings";
-import { fetchAreaFeatures, fetchKnooppunten, type AreaFeatures } from "./overpass";
+import { fetchAreaFeatures, fetchKnooppunten, legCrossesExcludedRoad, type AreaFeatures } from "./overpass";
 import { routeChain, type OsrmLeg } from "./osrm";
 import { resolveLocale } from "./resolveLocale";
 import type {
@@ -105,7 +105,16 @@ const URBAN_AVOID_BASE_WEIGHT = 0.6;
  * single score used to pick the best candidate at each step/sector. Distance
  * fit always has a baseline weight of 1 (routes still need to hit the
  * requested length); `shortestTime` additionally boosts that weight so a
- * direct, non-meandering path wins over scenic/POI detours.
+ * direct, non-meandering path wins over scenic detours.
+ *
+ * Deliberately does *not* weigh `f.poiScore` here (unlike destinations/
+ * scenic-route's own scoring, which still uses `priorities.poiDensity`) --
+ * a generic "pass more cafes" density nudge was replaced by explicit stop
+ * planning (rider picks a category + a stretch of the route, see
+ * StopsPlanner), which is a much more direct way to get a café on the route
+ * than biasing every candidate node. `poiScore` itself is still computed and
+ * used by `pickHighlight` below to describe a variant ("most stops along
+ * the way"), just no longer as a knooppunt-selection input.
  */
 function scoreCandidate(
   node: ScoredNode,
@@ -126,8 +135,7 @@ function scoreCandidate(
   return (
     radiusFit * radiusWeight +
     priorities.fewTrafficLights * f.trafficScore +
-    priorities.nature * f.natureScore +
-    priorities.poiDensity * f.poiScore -
+    priorities.nature * f.natureScore -
     (URBAN_AVOID_BASE_WEIGHT + priorities.nature) * f.urbanScore
   );
 }
@@ -365,7 +373,10 @@ const MAX_REFINE_ITERATIONS = 3;
  * sync with the same refine-loop behavior.
  */
 async function finalizeRoute(
-  req: Pick<PlanRequest, "mode" | "start" | "destination" | "direction" | "avgSpeedKmh">,
+  req: Pick<
+    PlanRequest,
+    "mode" | "start" | "destination" | "direction" | "avgSpeedKmh" | "avoidMainRoads"
+  >,
   nodes: Knooppunt[],
   targetDistanceM: number,
   pool: Knooppunt[],
@@ -447,6 +458,16 @@ async function finalizeRoute(
     ({ osrmLegs, totalDistanceM, totalDurationS } = await reroute(sequence, locale));
   }
 
+  if (req.avoidMainRoads) {
+    const usedIds = new Set(nodes.map((n) => n.id));
+    const avoided = await avoidExcludedRoads(sequence, nodes, osrmLegs, pool, usedIds, locale);
+    sequence = avoided.sequence;
+    nodes = avoided.nodes;
+    osrmLegs = avoided.osrmLegs;
+    totalDistanceM = avoided.totalDistanceM;
+    totalDurationS = avoided.totalDurationS;
+  }
+
   return {
     mode: req.mode,
     knooppunten: nodes,
@@ -455,6 +476,72 @@ async function finalizeRoute(
     totalDistanceM,
     totalDurationS: durationFromSpeed(totalDistanceM, req.avgSpeedKmh, totalDurationS),
   };
+}
+
+const MAX_AVOID_MAIN_ROAD_PASSES = 4;
+
+/**
+ * Best-effort hard exclusion of primary/trunk/secondary roads (+ _link
+ * variants): the public OSRM bike server has no request parameter to
+ * exclude specific road classes (that's a car-profile concept -- the stock
+ * bike profile doesn't define excludable classes the way the car profile
+ * does), so this can't just add an `exclude=` flag to the routing request.
+ * Instead, each already-routed leg is checked against Overpass; the first
+ * one found crossing an excluded road gets an extra waypoint inserted near
+ * its midpoint (nearest unused candidate from the same knooppunt pool) and
+ * the whole sequence is rerouted, repeating until clear or the pass budget
+ * runs out. This reliably clears the common case (one busy road standing
+ * between two otherwise-quiet knooppunten) but isn't a hard guarantee -- an
+ * area with no quiet alternative at all within the pool could still leave a
+ * short excluded stretch after the budget is spent.
+ */
+async function avoidExcludedRoads(
+  sequence: LatLon[],
+  nodes: Knooppunt[],
+  osrmLegs: OsrmLeg[],
+  pool: Knooppunt[],
+  usedIds: Set<number>,
+  locale: AppLocale
+): Promise<{
+  sequence: LatLon[];
+  nodes: Knooppunt[];
+  osrmLegs: OsrmLeg[];
+  totalDistanceM: number;
+  totalDurationS: number;
+}> {
+  let totalDistanceM = osrmLegs.reduce((s, l) => s + l.distanceM, 0);
+  let totalDurationS = osrmLegs.reduce((s, l) => s + l.durationS, 0);
+
+  for (let pass = 0; pass < MAX_AVOID_MAIN_ROAD_PASSES; pass++) {
+    let violatingLegIndex = -1;
+    for (let i = 0; i < osrmLegs.length; i++) {
+      if (await legCrossesExcludedRoad(osrmLegs[i].geometry, locale)) {
+        violatingLegIndex = i;
+        break;
+      }
+    }
+    if (violatingLegIndex === -1) break;
+
+    const legStart = sequence[violatingLegIndex];
+    const legEnd = sequence[violatingLegIndex + 1];
+    const midpoint = { lat: (legStart.lat + legEnd.lat) / 2, lon: (legStart.lon + legEnd.lon) / 2 };
+
+    const candidate = scoreNodes(midpoint, pool)
+      .filter((n) => !usedIds.has(n.id))
+      .sort((a, b) => a.distFromStart - b.distFromStart)[0];
+    if (!candidate) break; // no unused candidate left near this leg -- best effort, stop here
+
+    usedIds.add(candidate.id);
+    sequence = [
+      ...sequence.slice(0, violatingLegIndex + 1),
+      candidate,
+      ...sequence.slice(violatingLegIndex + 1),
+    ];
+    nodes = [...nodes.slice(0, violatingLegIndex), candidate, ...nodes.slice(violatingLegIndex)];
+    ({ osrmLegs, totalDistanceM, totalDurationS } = await reroute(sequence, locale));
+  }
+
+  return { sequence, nodes, osrmLegs, totalDistanceM, totalDurationS };
 }
 
 /** Fetches the shared knooppunt pool + area features once for a start point/search radius, reused by both planRoute and planRoundTripAlternatives. */
@@ -626,7 +713,13 @@ export async function planRoundTripAlternatives(
     const nodes = selectRoundTripNodes(req.start, pool, targetDistanceM, priorities, featureScores, direction);
     if (nodes.length < 2) return null;
     const route = await finalizeRoute(
-      { mode: "roundtrip", start: req.start, direction, avgSpeedKmh: req.avgSpeedKmh },
+      {
+        mode: "roundtrip",
+        start: req.start,
+        direction,
+        avgSpeedKmh: req.avgSpeedKmh,
+        avoidMainRoads: req.avoidMainRoads,
+      },
       nodes,
       targetDistanceM,
       pool,

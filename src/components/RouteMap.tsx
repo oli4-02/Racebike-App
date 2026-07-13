@@ -34,6 +34,11 @@ const poiIcons: Record<POI["category"], L.DivIcon> = {
   cafe: divIcon("#7c3aed", "☕"),
 };
 
+// A rider-chosen stop (see StopCandidates) stands out from the generic POI
+// markers regardless of category -- the category is still in the popup
+// text, the star just says "this one is planned in."
+const selectedStopIcon = divIcon("#f59e0b", "⭐");
+
 function ClickHandler({ onClick }: { onClick: (p: LatLon) => void }) {
   useMapEvents({
     click(e) {
@@ -252,6 +257,7 @@ export default function RouteMap({
   onSetStart,
   legs,
   pois,
+  selectedStopPois = [],
   wind = null,
   roadTypeSegments = [],
   preview = null,
@@ -263,6 +269,8 @@ export default function RouteMap({
   onSetStart: (p: LatLon) => void;
   legs: RouteLeg[];
   pois: POI[];
+  /** Rider-chosen stops (see StopCandidates), shown with a distinct star marker regardless of the poiCategories display toggle. */
+  selectedStopPois?: POI[];
   wind?: { directionDeg: number; speedKmh: number } | null;
   roadTypeSegments?: RoadTypeSegment[];
   /** Rough live search-area indicator shown before a route is computed (see LivePreviewOverlay); null hides it (e.g. once a real route exists). */
@@ -322,6 +330,15 @@ export default function RouteMap({
             key={`${poi.category}-${poi.id}`}
             position={[poi.lat, poi.lon]}
             icon={poiIcons[poi.category]}
+          >
+            <Popup>{poi.name}</Popup>
+          </Marker>
+        ))}
+        {selectedStopPois.map((poi) => (
+          <Marker
+            key={`stop-${poi.category}-${poi.id}`}
+            position={[poi.lat, poi.lon]}
+            icon={selectedStopIcon}
           >
             <Popup>{poi.name}</Popup>
           </Marker>

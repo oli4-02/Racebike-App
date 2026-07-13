@@ -21,6 +21,7 @@ import type {
   RouteMode,
   ScenicRoutePlan,
   SignatureRoutePlan,
+  StopRequest,
 } from "@/lib/types";
 import type { PlanPreview } from "@/components/RouteMap";
 
@@ -55,6 +56,8 @@ export default function PlannerPage() {
     "ice_cream",
     "cafe",
   ]);
+  const [stopRequests, setStopRequests] = useState<StopRequest[]>([]);
+  const [avoidMainRoads, setAvoidMainRoads] = useState(false);
   const [destination, setDestination] = useState<LatLon | null>(null);
   const [destinationLabel, setDestinationLabel] = useState<string | null>(null);
   const [oneWaySubMode, setOneWaySubMode] = useState<OneWaySubMode>("address");
@@ -66,6 +69,8 @@ export default function PlannerPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [roadTypeSegments, setRoadTypeSegments] = useState<RoadTypeResult["segments"]>([]);
+  // stopId -> the POI the rider picked for that stop from its candidate list.
+  const [selectedStopPoiIds, setSelectedStopPoiIds] = useState<Record<string, number>>({});
 
   const [activeTab, setActiveTab] = useState<PlannerTabKey>("where");
   const [collapsed, setCollapsed] = useState(false);
@@ -98,9 +103,16 @@ export default function PlannerPage() {
       : null;
 
   async function loadPois(geometry: LatLon[]) {
-    if (poiCategories.length === 0) return;
+    // Fetches for both the simple display-toggle categories and whatever
+    // categories the configured stops need -- a stop's candidate search
+    // must work regardless of whether that category also happens to be
+    // toggled on for map markers (the two are intentionally independent).
+    const categories = Array.from(
+      new Set([...poiCategories, ...stopRequests.map((s) => s.category)])
+    );
+    if (categories.length === 0) return;
     try {
-      const p = await fetchPois(geometry, poiCategories, locale);
+      const p = await fetchPois(geometry, categories, locale);
       setPois(p);
     } catch {
       // POIs are a nice-to-have; a failed lookup shouldn't block the route.
@@ -113,6 +125,7 @@ export default function PlannerPage() {
     setError(null);
     setPois([]);
     setRoadTypeSegments([]);
+    setSelectedStopPoiIds({});
     try {
       const planned = await planRoute(
         {
@@ -125,6 +138,7 @@ export default function PlannerPage() {
           direction: mode === "roundtrip" ? direction : undefined,
           avgSpeedKmh,
           poiCategories,
+          avoidMainRoads,
         },
         locale
       );
@@ -150,6 +164,7 @@ export default function PlannerPage() {
     setRoute(planned);
     setPois([]);
     setRoadTypeSegments([]);
+    setSelectedStopPoiIds({});
     setActiveTab("result");
     void loadPois(planned.geometry);
   }
@@ -163,6 +178,7 @@ export default function PlannerPage() {
     setRoute(result.route);
     setPois([]);
     setRoadTypeSegments([]);
+    setSelectedStopPoiIds({});
     setActiveTab("result");
     void loadPois(result.route.geometry);
   }
@@ -176,6 +192,7 @@ export default function PlannerPage() {
     setRoute(result.route);
     setPois([]);
     setRoadTypeSegments([]);
+    setSelectedStopPoiIds({});
     setActiveTab("result");
     void loadPois(result.route.geometry);
   }
@@ -220,6 +237,17 @@ export default function PlannerPage() {
       ? { mode, distanceKm, direction: mode === "roundtrip" ? direction : null }
       : null;
 
+  // Map markers only show the categories the rider actually toggled on --
+  // POIs fetched purely because a stop needs that category shouldn't leak
+  // onto the map as regular markers (stop planning and the display toggles
+  // are intentionally independent features). Selected stops are shown
+  // separately below with their own distinct marker regardless of the
+  // toggle state, since picking a stop is a stronger signal than a display
+  // preference.
+  const displayPois = pois.filter((p) => poiCategories.includes(p.category));
+  const selectedStopPoiIdSet = new Set(Object.values(selectedStopPoiIds));
+  const selectedStopPois = pois.filter((p) => selectedStopPoiIdSet.has(p.id));
+
   const tabs: { key: PlannerTabKey; label: string }[] = [
     { key: "where", label: t("tabs.where") },
     { key: "preferences", label: t("tabs.preferences") },
@@ -233,7 +261,8 @@ export default function PlannerPage() {
           start={mapStart}
           onSetStart={handleSetStart}
           legs={route?.legs ?? []}
-          pois={pois}
+          pois={displayPois}
+          selectedStopPois={selectedStopPois}
           wind={route?.windInfo ?? null}
           roadTypeSegments={route ? roadTypeSegments : []}
           preview={preview}
@@ -299,6 +328,7 @@ export default function PlannerPage() {
             priorities={priorities}
             avgSpeedKmh={avgSpeedKmh}
             poiCategories={poiCategories}
+            avoidMainRoads={avoidMainRoads}
             onRouteAlternative={handleRouteAlternative}
             onSignatureRoute={handleSignatureRoute}
             onDistanceKmChange={setDistanceKm}
@@ -315,6 +345,10 @@ export default function PlannerPage() {
             setAvgSpeedKmh={setAvgSpeedKmh}
             poiCategories={poiCategories}
             setPoiCategories={setPoiCategories}
+            stopRequests={stopRequests}
+            setStopRequests={setStopRequests}
+            avoidMainRoads={avoidMainRoads}
+            setAvoidMainRoads={setAvoidMainRoads}
           />
         )}
 
@@ -322,6 +356,7 @@ export default function PlannerPage() {
           <ResultStep
             route={route}
             pois={pois}
+            selectedStopPois={selectedStopPois}
             error={error}
             mode={mode}
             start={start}
@@ -330,6 +365,11 @@ export default function PlannerPage() {
             scenicPlan={scenicPlan}
             signaturePlan={signaturePlan}
             onRoadTypeSegments={setRoadTypeSegments}
+            stopRequests={stopRequests}
+            selectedStopPoiIds={selectedStopPoiIds}
+            onSelectStopPoi={(stopId, poiId) =>
+              setSelectedStopPoiIds((prev) => ({ ...prev, [stopId]: poiId }))
+            }
           />
         )}
       </PlannerPanel>

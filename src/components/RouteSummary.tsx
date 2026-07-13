@@ -83,11 +83,19 @@ function routeIdentity(route: PlannedRoute): string {
   return `${route.geometry.length}-${first?.lat}-${first?.lon}-${last?.lat}-${last?.lon}`;
 }
 
-function downloadGpx(route: PlannedRoute, pois: POI[]) {
+function downloadGpx(route: PlannedRoute, pois: POI[], extraWaypoints: POI[]) {
+  // Selected stops get a distinguishing name (rather than being appended as
+  // a duplicate waypoint) so they stand out from the generic POI markers in
+  // whatever GPS app the rider opens this in.
+  const highlightedIds = new Set(extraWaypoints.map((p) => p.id));
+  const merged = pois.map((p) =>
+    highlightedIds.has(p.id) ? { ...p, name: `⭐ ${p.name}` } : p
+  );
+
   const gpx = buildGpx({
     name: `Meewind ${new Date().toISOString().slice(0, 10)}`,
     geometry: route.geometry,
-    pois,
+    pois: merged,
   });
   const blob = new Blob([gpx], { type: "application/gpx+xml" });
   const url = URL.createObjectURL(blob);
@@ -101,10 +109,12 @@ function downloadGpx(route: PlannedRoute, pois: POI[]) {
 export default function RouteSummary({
   route,
   pois,
+  extraWaypoints = [],
   onRoadTypeSegments,
 }: {
   route: PlannedRoute;
   pois: POI[];
+  extraWaypoints?: POI[];
   onRoadTypeSegments?: (segments: RoadTypeSegment[]) => void;
 }) {
   const t = useTranslations("planner.summary");
@@ -144,11 +154,12 @@ export default function RouteSummary({
 
       <button
         type="button"
-        onClick={() => downloadGpx(route, pois)}
+        onClick={() => downloadGpx(route, pois, extraWaypoints)}
         className="rounded-md border border-meewind-border py-2 text-sm font-medium hover:bg-meewind-bg-raised"
       >
         {t("gpxExport")}
       </button>
+      <p className="text-xs text-meewind-fg-muted">{t("gpxExportHint")}</p>
     </div>
   );
 }

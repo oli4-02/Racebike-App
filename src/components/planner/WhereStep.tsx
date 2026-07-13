@@ -51,6 +51,7 @@ export default function WhereStep({
   priorities,
   avgSpeedKmh,
   poiCategories,
+  avoidMainRoads,
   onRouteAlternative,
   onSignatureRoute,
   onDistanceKmChange,
@@ -76,6 +77,7 @@ export default function WhereStep({
   priorities: Priorities;
   avgSpeedKmh: number;
   poiCategories: POICategory[];
+  avoidMainRoads: boolean;
   onRouteAlternative: (route: PlannedRoute) => void;
   onSignatureRoute: (result: SignatureRoutePlan) => void;
   onDistanceKmChange: (km: number) => void;
@@ -193,6 +195,7 @@ export default function WhereStep({
             direction={direction}
             avgSpeedKmh={avgSpeedKmh}
             poiCategories={poiCategories}
+            avoidMainRoads={avoidMainRoads}
             onPlanned={onRouteAlternative}
           />
         ) : (

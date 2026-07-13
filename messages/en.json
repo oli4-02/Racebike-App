@@ -139,6 +139,19 @@
       "poiSupermarket": "🛒 Supermarket",
       "poiIceCream": "🍦 Ice cream",
       "poiCafe": "☕ Café",
+      "stops": {
+        "title": "Plan stops",
+        "hint": "Set up to 3 desired stops — e.g. \"a café somewhere between 40% and 60% of the route\". After the route is planned we'll suggest the best matches in that stretch.",
+        "stopLabel": "Stop {n}",
+        "remove": "Remove stop",
+        "rangeLabel": "Route fraction",
+        "noneFound": "No matching stop found in this stretch of the route.",
+        "add": "+ Add stop"
+      },
+      "avoidMainRoads": {
+        "label": "Avoid main roads",
+        "hint": "Hard-excludes main roads (primary, trunk, secondary) from the route entirely, not just deprioritized."
+      },
       "direction": "Direction",
       "directionHint": "Pick a direction to head out into the countryside instead of looping around the start point.",
       "directions": {
@@ -165,15 +178,34 @@
       "title": "Priorities",
       "fewTrafficLights": "Few traffic lights/junctions",
       "nature": "Lots of nature/water",
-      "poiDensity": "Lots of cafés/POIs",
       "shortestTime": "Shortest time",
-      "tailwind": "Maximum tailwind"
+      "tailwind": "Maximum tailwind",
+      "fineTune": "Fine-tune",
+      "presets": {
+        "quietNature": {
+          "title": "Quiet & nature",
+          "subtitle": "Little traffic, lots of green and water"
+        },
+        "fastDirect": {
+          "title": "Fast & direct",
+          "subtitle": "Shortest time, few detours"
+        },
+        "cafeTour": {
+          "title": "Café tour",
+          "subtitle": "Relaxed pace for stops along the way"
+        },
+        "maxTailwind": {
+          "title": "Maximum tailwind",
+          "subtitle": "Wind direction is the top priority"
+        }
+      }
     },
     "summary": {
       "distance": "Distance",
       "duration": "Ride time (estimated)",
       "knooppunten": "Nodes",
       "gpxExport": "Export GPX (Garmin / Strava)",
+      "gpxExportHint": "For turn-by-turn navigation we recommend free apps like OsmAnd or Organic Maps (both support GPX import with voice navigation) instead of Google Maps, which only shows GPX tracks as a line, without navigation.",
       "roadTypes": {
         "title": "Road type",
         "loading": "Loading road type breakdown…",

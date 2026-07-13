@@ -27,6 +27,7 @@ export default function RouteAlternativesPicker({
   direction,
   avgSpeedKmh,
   poiCategories,
+  avoidMainRoads,
   onPlanned,
 }: {
   start: LatLon;
@@ -36,6 +37,7 @@ export default function RouteAlternativesPicker({
   direction: number | null;
   avgSpeedKmh: number;
   poiCategories: POICategory[];
+  avoidMainRoads: boolean;
   onPlanned: (route: PlannedRoute) => void;
 }) {
   const t = useTranslations("planner.alternatives");
@@ -51,7 +53,17 @@ export default function RouteAlternativesPicker({
     setSelectedIndex(null);
     try {
       const result = await planRouteAlternatives(
-        { start, mode: "roundtrip", distanceKm, date, priorities, direction, avgSpeedKmh, poiCategories },
+        {
+          start,
+          mode: "roundtrip",
+          distanceKm,
+          date,
+          priorities,
+          direction,
+          avgSpeedKmh,
+          poiCategories,
+          avoidMainRoads,
+        },
         locale
       );
       setAlternatives(result);

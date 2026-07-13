@@ -506,6 +506,51 @@ out geom;`;
   };
 }
 
+const EXCLUDED_HIGHWAY_CLASSES = [
+  "primary",
+  "primary_link",
+  "trunk",
+  "trunk_link",
+  "secondary",
+  "secondary_link",
+];
+const EXCLUDED_ROAD_CORRIDOR_M = 15;
+const EXCLUDED_ROAD_MAX_SAMPLE_POINTS = 20;
+
+/**
+ * Whether a single OSRM leg's geometry runs anywhere near a primary/trunk/
+ * secondary road (or a _link variant) -- used by "avoid main roads" (see
+ * routePlanner.ts's avoidExcludedRoads()) to decide whether a leg needs
+ * rerouting. A narrow, per-leg query (legs are short) rather than checking
+ * the whole route's search area at once, which would be far too large an
+ * Overpass request for anything but a short ride.
+ */
+export async function legCrossesExcludedRoad(
+  geometry: LatLon[],
+  locale: AppLocale = routing.defaultLocale
+): Promise<boolean> {
+  if (geometry.length < 2) return false;
+
+  const step = Math.max(1, Math.ceil(geometry.length / EXCLUDED_ROAD_MAX_SAMPLE_POINTS));
+  const sampled = geometry.filter((_, i) => i % step === 0);
+  const aroundArg = sampled.map((p) => `${p.lat},${p.lon}`).join(",");
+
+  const highwayPattern = `^(${EXCLUDED_HIGHWAY_CLASSES.join("|")})$`;
+  const query = `[out:json][timeout:20];
+way["highway"~"${highwayPattern}"](around:${EXCLUDED_ROAD_CORRIDOR_M},${aroundArg});
+out ids 1;`;
+
+  try {
+    const data = await runOverpassQuery(query, locale);
+    return (data.elements ?? []).length > 0;
+  } catch {
+    // Best-effort: if the check itself fails, don't block the route on it --
+    // the rider still gets a route, just without the guaranteed exclusion
+    // for this leg.
+    return false;
+  }
+}
+
 function categorize(tags: Record<string, string>): POICategory {
   if (tags.amenity === "fuel") return "fuel";
   if (tags.shop === "supermarket") return "supermarket";

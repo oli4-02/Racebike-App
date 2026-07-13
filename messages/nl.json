@@ -139,6 +139,19 @@
       "poiSupermarket": "🛒 Supermarkt",
       "poiIceCream": "🍦 IJssalon",
       "poiCafe": "☕ Café",
+      "stops": {
+        "title": "Stops plannen",
+        "hint": "Stel tot 3 gewenste stops in — bijv. \"ergens tussen 40% en 60% van de route een café\". Na het plannen van de route stellen we de beste opties in dat stuk voor.",
+        "stopLabel": "Stop {n}",
+        "remove": "Stop verwijderen",
+        "rangeLabel": "Routeaandeel",
+        "noneFound": "Geen passende stop gevonden in dit deel van de route.",
+        "add": "+ Stop toevoegen"
+      },
+      "avoidMainRoads": {
+        "label": "Grote wegen vermijden",
+        "hint": "Sluit hoofdwegen (primary, trunk, secondary) volledig uit van de route, niet alleen lager gewogen."
+      },
       "direction": "Richting",
       "directionHint": "Kies een richting om echt het land in te fietsen in plaats van rondjes rond het startpunt.",
       "directions": {
@@ -165,15 +178,34 @@
       "title": "Prioriteiten",
       "fewTrafficLights": "Weinig verkeerslichten/kruisingen",
       "nature": "Veel natuur/water",
-      "poiDensity": "Veel cafés/POI's",
       "shortestTime": "Kortste tijd",
-      "tailwind": "Maximale rugwind"
+      "tailwind": "Maximale rugwind",
+      "fineTune": "Fijn afstellen",
+      "presets": {
+        "quietNature": {
+          "title": "Rustig & natuur",
+          "subtitle": "Weinig verkeer, veel groen en water"
+        },
+        "fastDirect": {
+          "title": "Snel & direct",
+          "subtitle": "Kortste tijd, weinig omwegen"
+        },
+        "cafeTour": {
+          "title": "Café-tour",
+          "subtitle": "Ontspannen tempo voor stops onderweg"
+        },
+        "maxTailwind": {
+          "title": "Maximale rugwind",
+          "subtitle": "Windrichting heeft topprioriteit"
+        }
+      }
     },
     "summary": {
       "distance": "Afstand",
       "duration": "Rijtijd (geschat)",
       "knooppunten": "Knooppunten",
       "gpxExport": "GPX exporteren (Garmin / Strava)",
+      "gpxExportHint": "Voor turn-by-turn-navigatie raden we gratis apps als OsmAnd of Organic Maps aan (beide ondersteunen GPX-import met gesproken navigatie) in plaats van Google Maps, dat GPX-tracks alleen als lijn toont, zonder navigatie.",
       "roadTypes": {
         "title": "Wegtype",
         "loading": "Wegtype-analyse laden…",
