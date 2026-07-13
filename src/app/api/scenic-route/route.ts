@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     distanceKm: number;
     date: string;
     priorities?: Priorities;
+    avgSpeedKmh?: number;
     locale?: string;
   };
   try {
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
             .catch(() => null)
         : Promise.resolve(null),
       fetchTowns(corridor.center, searchRadiusM, locale),
-      fetchAreaFeatures(corridor.center, searchRadiusM, false, locale),
+      fetchAreaFeatures(corridor.center, searchRadiusM, false, undefined, locale),
     ]);
 
     const entryPoint: LatLon = entryStationRaw ?? corridor.center;
@@ -102,6 +103,7 @@ export async function POST(req: NextRequest) {
       date: body.date,
       priorities,
       destination: exitTown,
+      avgSpeedKmh: body.avgSpeedKmh,
       locale,
     });
     if (windInfo) route.windInfo = windInfo;

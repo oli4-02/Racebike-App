@@ -56,6 +56,20 @@ export type PlanRequest = {
    * keeps the default all-around loop.
    */
   direction?: number | null;
+  /**
+   * The rider's selected stop categories (fuel/supermarket/ice_cream/cafe).
+   * Biases node candidate selection towards passing near them, not just
+   * which markers get overlaid on the map afterwards. Defaults to all four
+   * when omitted.
+   */
+  poiCategories?: POICategory[];
+  /**
+   * Rider's average speed in km/h, used to compute totalDurationS as
+   * distance/speed instead of trusting OSRM's bike-profile assumed speed
+   * (tuned for a generic city bike, not a road bike). Omit/0 keeps the OSRM
+   * estimate.
+   */
+  avgSpeedKmh?: number;
   /** UI language, used to localize wind explanations, POI labels, and error messages generated server-side. Defaults to "de". */
   locale?: string;
 };
@@ -83,6 +97,11 @@ export type RoadTypeBreakdown = {
   otherPct: number;
 };
 
+/** A contiguous stretch of route geometry classified as a single road type, for map coloring. */
+export type RoadTypeSegment = { points: LatLon[]; type: keyof RoadTypeBreakdown };
+
+export type RoadTypeResult = { breakdown: RoadTypeBreakdown; segments: RoadTypeSegment[] };
+
 export type PlannedRoute = {
   mode: RouteMode;
   knooppunten: Knooppunt[];
@@ -102,6 +121,8 @@ export type RoundTripAlternative = {
   directionLabel: string;
   direction: number | null;
   route: PlannedRoute;
+  /** Human-readable "why pick this one" (most nature, quietest, most stops, or a plain direct loop). */
+  reason: string;
 };
 
 export type WindForecast = {

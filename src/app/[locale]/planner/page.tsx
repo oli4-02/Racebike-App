@@ -21,6 +21,7 @@ import type {
   POI,
   POICategory,
   Priorities,
+  RoadTypeResult,
   RouteMode,
   ScenicRoutePlan,
   SignatureRoutePlan,
@@ -49,6 +50,7 @@ export default function PlannerPage() {
   const [appMode, setAppMode] = useState<AppMode>("roundtrip");
   const [distanceKm, setDistanceKm] = useState(60);
   const [direction, setDirection] = useState<number | null>(null);
+  const [avgSpeedKmh, setAvgSpeedKmh] = useState(27);
   const [date, setDate] = useState(today());
   const [priorities, setPriorities] = useState<Priorities>(DEFAULT_PRIORITIES);
   const [poiCategories, setPoiCategories] = useState<POICategory[]>([
@@ -67,6 +69,7 @@ export default function PlannerPage() {
   const [pois, setPois] = useState<POI[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [roadTypeSegments, setRoadTypeSegments] = useState<RoadTypeResult["segments"]>([]);
 
   // The core planner only knows roundtrip/oneway; "signature" is a UI-level
   // mode that always resolves to a roundtrip plan via its own endpoint.
@@ -95,6 +98,7 @@ export default function PlannerPage() {
     setLoading(true);
     setError(null);
     setPois([]);
+    setRoadTypeSegments([]);
     try {
       const planned = await planRoute(
         {
@@ -105,11 +109,16 @@ export default function PlannerPage() {
           priorities,
           destination: mode === "oneway" ? destination! : undefined,
           direction: mode === "roundtrip" ? direction : undefined,
+          avgSpeedKmh,
+          poiCategories,
         },
         locale
       );
       setRoute(planned);
-      await loadPois(planned.geometry);
+      // POIs are a secondary, non-blocking overlay -- don't make the user
+      // wait through another Overpass round trip before the route itself
+      // (already computed) is shown.
+      void loadPois(planned.geometry);
     } catch (e) {
       setError(e instanceof Error ? e.message : t("home.routeError"));
       setRoute(null);
@@ -118,16 +127,17 @@ export default function PlannerPage() {
     }
   }
 
-  async function handleRouteAlternative(planned: PlannedRoute) {
+  function handleRouteAlternative(planned: PlannedRoute) {
     setError(null);
     setScenicPlan(null);
     setSignaturePlan(null);
     setRoute(planned);
     setPois([]);
-    await loadPois(planned.geometry);
+    setRoadTypeSegments([]);
+    void loadPois(planned.geometry);
   }
 
-  async function handleScenicRoute(result: ScenicRoutePlan) {
+  function handleScenicRoute(result: ScenicRoutePlan) {
     setError(null);
     setDestination(null);
     setDestinationLabel(null);
@@ -135,10 +145,11 @@ export default function PlannerPage() {
     setScenicPlan(result);
     setRoute(result.route);
     setPois([]);
-    await loadPois(result.route.geometry);
+    setRoadTypeSegments([]);
+    void loadPois(result.route.geometry);
   }
 
-  async function handleSignatureRoute(result: SignatureRoutePlan) {
+  function handleSignatureRoute(result: SignatureRoutePlan) {
     setError(null);
     setDestination(null);
     setDestinationLabel(null);
@@ -146,7 +157,8 @@ export default function PlannerPage() {
     setSignaturePlan(result);
     setRoute(result.route);
     setPois([]);
-    await loadPois(result.route.geometry);
+    setRoadTypeSegments([]);
+    void loadPois(result.route.geometry);
   }
 
   function handleSetAppMode(next: AppMode) {
@@ -200,6 +212,7 @@ export default function PlannerPage() {
             distanceKm={distanceKm}
             date={date}
             priorities={priorities}
+            avgSpeedKmh={avgSpeedKmh}
             destination={destination}
             destinationLabel={destinationLabel}
             onSelectDestination={(p, label) => {
@@ -219,6 +232,8 @@ export default function PlannerPage() {
             date={date}
             priorities={priorities}
             direction={direction}
+            avgSpeedKmh={avgSpeedKmh}
+            poiCategories={poiCategories}
             onPlanned={handleRouteAlternative}
           />
         )}
@@ -229,6 +244,7 @@ export default function PlannerPage() {
             distanceKm={distanceKm}
             date={date}
             priorities={priorities}
+            avgSpeedKmh={avgSpeedKmh}
             onDistanceKmChange={setDistanceKm}
             onPlanned={handleSignatureRoute}
           />
@@ -247,6 +263,8 @@ export default function PlannerPage() {
           setPoiCategories={setPoiCategories}
           direction={direction}
           setDirection={setDirection}
+          avgSpeedKmh={avgSpeedKmh}
+          setAvgSpeedKmh={setAvgSpeedKmh}
           onSubmit={handleSubmit}
           loading={loading}
           canSubmit={canSubmit}
@@ -295,7 +313,9 @@ export default function PlannerPage() {
           </div>
         )}
 
-        {route && <RouteSummary route={route} pois={pois} />}
+        {route && (
+          <RouteSummary route={route} pois={pois} onRoadTypeSegments={setRoadTypeSegments} />
+        )}
 
         {scenicPlan && (
           <>
@@ -347,6 +367,7 @@ export default function PlannerPage() {
           legs={route?.legs ?? []}
           pois={pois}
           wind={route?.windInfo ?? null}
+          roadTypeSegments={route ? roadTypeSegments : []}
           destination={mapDestination}
           homeMarker={mapHomeMarker}
           labels={{

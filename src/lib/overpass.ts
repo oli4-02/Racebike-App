@@ -1,7 +1,7 @@
 import { routing, type AppLocale } from "@/i18n/routing";
 import { distance } from "./geo";
 import { OVERPASS_STRINGS, POI_CATEGORY_LABELS } from "./i18nStrings";
-import type { Knooppunt, LatLon, POI, POICategory, RoadTypeBreakdown } from "./types";
+import type { Knooppunt, LatLon, POI, POICategory, RoadTypeBreakdown, RoadTypeResult, RoadTypeSegment } from "./types";
 
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
@@ -189,14 +189,20 @@ export type AreaFeatures = {
   greenPoints: LatLon[];
   poiPoints: LatLon[];
   attractionPoints: LatLon[];
+  /** Centroids of built-up landuse polygons (residential/commercial/industrial/retail), used as an anti-city signal. */
+  urbanPoints: LatLon[];
 };
+
+const DEFAULT_AREA_POI_CATEGORIES: POICategory[] = ["cafe", "ice_cream", "fuel", "supermarket"];
 
 /**
  * Single combined query for the criteria that bias knooppunt selection:
  * traffic signals/crossings (fewer nearby = better), water and green space
- * (more nearby = better), and cafes/ice cream (more nearby = better). One
- * Overpass round-trip instead of four, using `out center` so way/relation
- * results (water bodies, forests) also come back as a single point.
+ * (more nearby = better), built-up/residential land (fewer nearby = better,
+ * see routePlanner's urbanScore), and the rider's selected POI categories
+ * (more nearby = better). One Overpass round-trip instead of several, using
+ * `out center` so way/relation results (water bodies, forests, landuse
+ * polygons) also come back as a single point.
  *
  * `includeAttractions` folds the tourism/historic tag query in too (used by
  * routePlanner, whose search radius is small enough that this stays cheap)
@@ -208,6 +214,7 @@ export async function fetchAreaFeatures(
   center: LatLon,
   radiusM: number,
   includeAttractions = false,
+  poiCategories: POICategory[] = DEFAULT_AREA_POI_CATEGORIES,
   locale: AppLocale = routing.defaultLocale
 ): Promise<AreaFeatures> {
   const around = `around:${radiusM},${center.lat},${center.lon}`;
@@ -218,6 +225,11 @@ export async function fetchAreaFeatures(
   node["historic"](${around});
   way["historic"](${around});`
     : "";
+  const effectivePoiCategories = poiCategories.length > 0 ? poiCategories : DEFAULT_AREA_POI_CATEGORIES;
+  const poiClauses = effectivePoiCategories
+    .flatMap((cat) => POI_FILTERS[cat])
+    .map((f) => `  ${f}(${around});`)
+    .join("\n");
   const query = `[out:json][timeout:25];
 (
   node["highway"~"^(traffic_signals|crossing)$"](${around});
@@ -226,9 +238,8 @@ export async function fetchAreaFeatures(
   way["waterway"](${around});
   way["natural"="wood"](${around});
   way["landuse"~"^(forest|wood)$"](${around});
-  node["amenity"="cafe"](${around});
-  node["amenity"="ice_cream"](${around});
-  node["shop"="ice_cream"](${around});${attractionClauses}
+  way["landuse"~"^(residential|commercial|industrial|retail)$"](${around});
+${poiClauses}${attractionClauses}
 );
 out center;`;
 
@@ -241,6 +252,7 @@ out center;`;
     greenPoints: [],
     poiPoints: [],
     attractionPoints: [],
+    urbanPoints: [],
   };
   for (const el of elements) {
     const point = elementPoint(el);
@@ -251,13 +263,17 @@ out center;`;
     else if (bucket === "green") features.greenPoints.push(point);
     else if (bucket === "poi") features.poiPoints.push(point);
     else if (bucket === "attraction") features.attractionPoints.push(point);
+    else if (bucket === "urban") features.urbanPoints.push(point);
   }
   return features;
 }
 
+const AREA_POI_AMENITIES = new Set(["cafe", "ice_cream", "fuel"]);
+const AREA_POI_SHOPS = new Set(["ice_cream", "supermarket"]);
+
 function bucketAreaFeature(
   tags: Record<string, string>
-): "traffic" | "water" | "green" | "poi" | "attraction" | null {
+): "traffic" | "water" | "green" | "poi" | "attraction" | "urban" | null {
   if (tags.highway === "traffic_signals" || tags.highway === "crossing")
     return "traffic";
   if (tags.natural === "water" || tags.waterway) return "water";
@@ -267,7 +283,12 @@ function bucketAreaFeature(
     tags.landuse === "wood"
   )
     return "green";
-  if (tags.amenity === "cafe" || tags.amenity === "ice_cream" || tags.shop === "ice_cream")
+  if (tags.landuse && ["residential", "commercial", "industrial", "retail"].includes(tags.landuse))
+    return "urban";
+  if (
+    (tags.amenity && AREA_POI_AMENITIES.has(tags.amenity)) ||
+    (tags.shop && AREA_POI_SHOPS.has(tags.shop))
+  )
     return "poi";
   if (tags.tourism || tags.historic) return "attraction";
   return null;
@@ -362,26 +383,42 @@ function classifyHighway(highway: string | undefined): keyof RoadTypeBreakdown {
   }
 }
 
+// A sample point further than this from every candidate way's nearest vertex
+// is treated as unmatched (carries the previous segment's type forward)
+// rather than trusting a distant, probably-unrelated way.
+const ROAD_TYPE_MATCH_MAX_M = 30;
+// Cheap lat/lon bounding check before the more expensive haversine distance()
+// call -- rules out most vertices at a glance so classifying ~150 sample
+// points against every returned way's geometry stays fast.
+const ROAD_TYPE_MATCH_MAX_DEG = 0.0005;
+
 /**
  * Best-effort classification of the road surface a route actually follows
  * (dedicated cycleway vs. residential/traffic-calmed street vs. a normal
- * road shared with car traffic), by matching `highway=*` ways within a tight
- * corridor of the route geometry and length-weighting each bucket -- a way
- * sampled by several nearby route points must only count once, and a long
- * way should count for more than a short one, so this dedupes by way id and
- * sums each way's own geometry length rather than just counting matches.
+ * road shared with car traffic). Matches `highway=*` ways within a tight
+ * corridor of the route geometry, then map-matches each sampled route point
+ * to its nearest way vertex to classify that specific stretch -- this both
+ * feeds the aggregate percentage breakdown (weighted by the route's own
+ * classified distance, not just the matched ways' total length) and produces
+ * contiguous colored segments so the map can show *where* the cycleway ends
+ * and the residential street begins, not just an overall ratio.
  * Returns null (rather than throwing) on any Overpass failure, since this is
- * a nice-to-have transparency panel, not something that should block the
+ * a nice-to-have transparency feature, not something that should block the
  * route itself from displaying.
  */
 export async function fetchRoadTypeBreakdown(
   route: LatLon[],
   locale: AppLocale = routing.defaultLocale
-): Promise<RoadTypeBreakdown | null> {
+): Promise<RoadTypeResult | null> {
   if (route.length < 2) return null;
 
   const step = Math.max(1, Math.ceil(route.length / ROAD_TYPE_MAX_SAMPLE_POINTS));
-  const sampled = route.filter((_, i) => i % step === 0);
+  const sampleIndices: number[] = [];
+  for (let i = 0; i < route.length; i += step) sampleIndices.push(i);
+  if (sampleIndices[sampleIndices.length - 1] !== route.length - 1) {
+    sampleIndices.push(route.length - 1);
+  }
+  const sampled = sampleIndices.map((i) => route[i]);
   const aroundArg = sampled.map((p) => `${p.lat},${p.lon}`).join(",");
 
   const query = `[out:json][timeout:25];
@@ -396,32 +433,76 @@ out geom;`;
   }
 
   const seenWayIds = new Set<number>();
-  const bucketM: RoadTypeBreakdown = {
-    cyclewayPct: 0,
-    residentialPct: 0,
-    mainRoadPct: 0,
-    otherPct: 0,
-  };
-  let totalM = 0;
-
+  const ways: { type: keyof RoadTypeBreakdown; geometry: LatLon[] }[] = [];
   for (const el of data.elements ?? []) {
     if (el.type !== "way" || seenWayIds.has(el.id) || !el.geometry || el.geometry.length < 2) continue;
     seenWayIds.add(el.id);
+    ways.push({ type: classifyHighway(el.tags?.highway), geometry: el.geometry });
+  }
+  if (ways.length === 0) return null;
 
-    let lengthM = 0;
-    for (let i = 1; i < el.geometry.length; i++) {
-      lengthM += distance(el.geometry[i - 1], el.geometry[i]);
+  function nearestType(point: LatLon): keyof RoadTypeBreakdown | null {
+    let best: keyof RoadTypeBreakdown | null = null;
+    let bestDist = ROAD_TYPE_MATCH_MAX_M;
+    for (const way of ways) {
+      for (const v of way.geometry) {
+        if (
+          Math.abs(v.lat - point.lat) > ROAD_TYPE_MATCH_MAX_DEG ||
+          Math.abs(v.lon - point.lon) > ROAD_TYPE_MATCH_MAX_DEG
+        ) {
+          continue;
+        }
+        const d = distance(point, v);
+        if (d < bestDist) {
+          bestDist = d;
+          best = way.type;
+        }
+      }
     }
-    bucketM[classifyHighway(el.tags?.highway)] += lengthM;
-    totalM += lengthM;
+    return best;
   }
 
+  // Carry the previous match forward across unmatched samples so a brief gap
+  // in the query results doesn't fragment one continuous stretch into noise.
+  let lastKnown: keyof RoadTypeBreakdown = "otherPct";
+  const sampleTypes = sampled.map((p) => {
+    const matched = nearestType(p);
+    if (matched) lastKnown = matched;
+    return lastKnown;
+  });
+
+  const segments: RoadTypeSegment[] = [];
+  for (let i = 0; i < sampleIndices.length; i++) {
+    const startIdx = sampleIndices[i];
+    const endIdx = i + 1 < sampleIndices.length ? sampleIndices[i + 1] : route.length - 1;
+    const points = route.slice(startIdx, endIdx + 1);
+    const type = sampleTypes[i];
+    const prev = segments[segments.length - 1];
+    if (prev && prev.type === type) {
+      prev.points.push(...points.slice(1));
+    } else if (points.length > 0) {
+      segments.push({ points, type });
+    }
+  }
+
+  const bucketM: RoadTypeBreakdown = { cyclewayPct: 0, residentialPct: 0, mainRoadPct: 0, otherPct: 0 };
+  let totalM = 0;
+  for (const seg of segments) {
+    let lengthM = 0;
+    for (let i = 1; i < seg.points.length; i++) lengthM += distance(seg.points[i - 1], seg.points[i]);
+    bucketM[seg.type] += lengthM;
+    totalM += lengthM;
+  }
   if (totalM === 0) return null;
+
   return {
-    cyclewayPct: Math.round((bucketM.cyclewayPct / totalM) * 100),
-    residentialPct: Math.round((bucketM.residentialPct / totalM) * 100),
-    mainRoadPct: Math.round((bucketM.mainRoadPct / totalM) * 100),
-    otherPct: Math.round((bucketM.otherPct / totalM) * 100),
+    breakdown: {
+      cyclewayPct: Math.round((bucketM.cyclewayPct / totalM) * 100),
+      residentialPct: Math.round((bucketM.residentialPct / totalM) * 100),
+      mainRoadPct: Math.round((bucketM.mainRoadPct / totalM) * 100),
+      otherPct: Math.round((bucketM.otherPct / totalM) * 100),
+    },
+    segments,
   };
 }
 

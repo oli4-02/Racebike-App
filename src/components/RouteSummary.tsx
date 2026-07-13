@@ -4,7 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { fetchRoadTypeBreakdown } from "@/lib/apiClient";
 import { buildGpx } from "@/lib/gpx";
-import type { PlannedRoute, POI, RoadTypeBreakdown } from "@/lib/types";
+import type { PlannedRoute, POI, RoadTypeBreakdown, RoadTypeSegment } from "@/lib/types";
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -19,7 +19,13 @@ const ROAD_TYPE_SEGMENTS: { key: keyof RoadTypeBreakdown; color: string }[] = [
   { key: "otherPct", color: "bg-meewind-fg-muted" },
 ];
 
-function RoadTypeSummary({ geometry }: { geometry: PlannedRoute["geometry"] }) {
+function RoadTypeSummary({
+  geometry,
+  onSegments,
+}: {
+  geometry: PlannedRoute["geometry"];
+  onSegments?: (segments: RoadTypeSegment[]) => void;
+}) {
   const t = useTranslations("planner.summary.roadTypes");
   const locale = useLocale();
   const [breakdown, setBreakdown] = useState<RoadTypeBreakdown | null>(null);
@@ -28,19 +34,22 @@ function RoadTypeSummary({ geometry }: { geometry: PlannedRoute["geometry"] }) {
   useEffect(() => {
     let cancelled = false;
     fetchRoadTypeBreakdown(geometry, locale)
-      .then((b) => {
+      .then((r) => {
         if (cancelled) return;
-        setBreakdown(b);
+        setBreakdown(r?.breakdown ?? null);
         setLoading(false);
+        onSegments?.(r?.segments ?? []);
       })
       .catch(() => {
         if (cancelled) return;
         setBreakdown(null);
         setLoading(false);
+        onSegments?.([]);
       });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onSegments is a fresh setState wrapper each render; including it would refetch on every parent re-render
   }, [geometry, locale]);
 
   if (loading) return <p className="text-xs text-meewind-fg-muted">{t("loading")}</p>;
@@ -92,9 +101,11 @@ function downloadGpx(route: PlannedRoute, pois: POI[]) {
 export default function RouteSummary({
   route,
   pois,
+  onRoadTypeSegments,
 }: {
   route: PlannedRoute;
   pois: POI[];
+  onRoadTypeSegments?: (segments: RoadTypeSegment[]) => void;
 }) {
   const t = useTranslations("planner.summary");
 
@@ -125,7 +136,11 @@ export default function RouteSummary({
         </div>
       )}
 
-      <RoadTypeSummary key={routeIdentity(route)} geometry={route.geometry} />
+      <RoadTypeSummary
+        key={routeIdentity(route)}
+        geometry={route.geometry}
+        onSegments={onRoadTypeSegments}
+      />
 
       <button
         type="button"

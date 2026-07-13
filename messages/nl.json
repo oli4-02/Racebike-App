@@ -125,6 +125,7 @@
       "distanceScenic": "Gewenste rijlengte in de corridor",
       "distanceOneway": "Zoekafstand voor bestemming",
       "date": "Rijdatum",
+      "avgSpeed": "Gem. snelheid (voor de tijdsschatting)",
       "poiTitle": "Interessante plekken",
       "poiFuel": "⛽ Tankstation",
       "poiSupermarket": "🛒 Supermarkt",
@@ -177,7 +178,13 @@
       "loading": "Varianten worden berekend…",
       "error": "Varianten konden niet worden geladen.",
       "choose": "Deze route kiezen",
-      "chosen": "Gekozen ✓"
+      "chosen": "Gekozen ✓",
+      "highlights": {
+        "nature": "Meeste natuur (water & bos)",
+        "quiet": "Rustigste route (minst verkeer/woonwijk)",
+        "poiRich": "De meeste stops onderweg",
+        "direct": "Directe, eenvoudige ronde"
+      }
     },
     "scenic": {
       "loading": "Corridors laden…",
@@ -211,7 +218,9 @@
       "loading": "Kaart wordt geladen…",
       "start": "Start",
       "home": "Thuis",
-      "destination": "Bestemming"
+      "destination": "Bestemming",
+      "colorByWind": "Wind",
+      "colorByRoadType": "Wegtype"
     },
     "home": {
       "scenicOutboundTitle": "Heenreis (thuis → instap)",

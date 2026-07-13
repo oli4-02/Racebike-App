@@ -21,8 +21,17 @@ export default function AddressSearch({
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Selecting a result calls setQuery(displayName) to show it in the input,
+  // which would otherwise re-trigger this same search effect and reopen the
+  // dropdown a moment later -- looking to the user like their click on a
+  // result "didn't work" and they need to click it again.
+  const skipNextSearchRef = useRef(false);
 
   useEffect(() => {
+    if (skipNextSearchRef.current) {
+      skipNextSearchRef.current = false;
+      return;
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       const q = query.trim();
@@ -68,8 +77,10 @@ export default function AddressSearch({
                 type="button"
                 className="w-full text-left px-3 py-2 hover:bg-meewind-accent/10"
                 onClick={() => {
+                  skipNextSearchRef.current = true;
                   onSelect({ lat: r.lat, lon: r.lon }, r.displayName);
                   setQuery(r.displayName);
+                  setResults([]);
                   setOpen(false);
                 }}
               >

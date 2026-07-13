@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
 
     const [tourismPoints, areaFeatures, wikiInfos] = await Promise.all([
       fetchTourismHistoricPoints(preScored, TOWN_CENTER_RADIUS_M, locale),
-      fetchAreaFeatures(start, searchRadiusM, false, locale),
+      fetchAreaFeatures(start, searchRadiusM, false, undefined, locale),
       Promise.all(preScored.map((c) => fetchWikipediaInfo(c.name))),
     ]);
 

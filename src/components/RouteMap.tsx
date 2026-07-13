@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -14,7 +15,14 @@ import type L from "leaflet";
 import { bearing } from "@/lib/geo";
 import { tailwindColor, tailwindComponent } from "@/lib/wind";
 import { destinationIcon, divIcon, homeIcon } from "@/lib/leafletIcons";
-import type { LatLon, POI, RouteLeg } from "@/lib/types";
+import type { LatLon, POI, RoadTypeBreakdown, RoadTypeSegment, RouteLeg } from "@/lib/types";
+
+const ROAD_TYPE_COLORS: Record<keyof RoadTypeBreakdown, string> = {
+  cyclewayPct: "#16a34a",
+  residentialPct: "#f59e0b",
+  mainRoadPct: "#dc2626",
+  otherPct: "#6b7280",
+};
 
 const poiIcons: Record<POI["category"], L.DivIcon> = {
   fuel: divIcon("#e11d48", "⛽"),
@@ -90,12 +98,54 @@ function LegPolylines({
   );
 }
 
+/** Colors each stretch of the route by its OSM road type (cycleway/residential/main road/other). */
+function RoadTypePolylines({ segments }: { segments: RoadTypeSegment[] }) {
+  return (
+    <>
+      {segments.map((seg, i) => {
+        const positions: [number, number][] = seg.points.map((p) => [p.lat, p.lon]);
+        if (positions.length < 2) return null;
+        return <Polyline key={i} positions={positions} color={ROAD_TYPE_COLORS[seg.type]} weight={5} />;
+      })}
+    </>
+  );
+}
+
+function ColorModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: "wind" | "roadType";
+  onChange: (mode: "wind" | "roadType") => void;
+}) {
+  const t = useTranslations("planner.map");
+  return (
+    <div className="absolute top-3 left-3 z-[1000] flex rounded-md overflow-hidden border border-meewind-border bg-white/90 dark:bg-zinc-900/90 text-xs shadow-md">
+      <button
+        type="button"
+        onClick={() => onChange("wind")}
+        className={`px-2 py-1 ${mode === "wind" ? "bg-meewind-accent text-meewind-accent-fg" : ""}`}
+      >
+        {t("colorByWind")}
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("roadType")}
+        className={`px-2 py-1 ${mode === "roadType" ? "bg-meewind-accent text-meewind-accent-fg" : ""}`}
+      >
+        {t("colorByRoadType")}
+      </button>
+    </div>
+  );
+}
+
 export default function RouteMap({
   start,
   onSetStart,
   legs,
   pois,
   wind = null,
+  roadTypeSegments = [],
   destination = null,
   homeMarker = null,
   labels = { start: "Start", home: "Home", destination: "Destination" },
@@ -105,6 +155,7 @@ export default function RouteMap({
   legs: RouteLeg[];
   pois: POI[];
   wind?: { directionDeg: number; speedKmh: number } | null;
+  roadTypeSegments?: RoadTypeSegment[];
   destination?: LatLon | null;
   /** Shown as a distinct house icon; used in scenic-route mode where `start` is the corridor entry station, not the rider's actual home. */
   homeMarker?: LatLon | null;
@@ -114,6 +165,8 @@ export default function RouteMap({
     () => (start ? [start.lat, start.lon] : [52.09, 5.12]),
     [start]
   );
+  const [colorMode, setColorMode] = useState<"wind" | "roadType">("wind");
+  const showRoadType = colorMode === "roadType" && roadTypeSegments.length > 0;
 
   return (
     <div className="relative h-full w-full">
@@ -129,7 +182,11 @@ export default function RouteMap({
             <Popup>{labels.start}</Popup>
           </Marker>
         )}
-        <LegPolylines legs={legs} wind={wind} />
+        {showRoadType ? (
+          <RoadTypePolylines segments={roadTypeSegments} />
+        ) : (
+          <LegPolylines legs={legs} wind={wind} />
+        )}
         {homeMarker && (
           <Marker position={[homeMarker.lat, homeMarker.lon]} icon={homeIcon}>
             <Popup>{labels.home}</Popup>
@@ -150,7 +207,8 @@ export default function RouteMap({
           </Marker>
         ))}
       </MapContainer>
-      <WindCompassOverlay wind={wind} />
+      {roadTypeSegments.length > 0 && <ColorModeToggle mode={colorMode} onChange={setColorMode} />}
+      <WindCompassOverlay wind={showRoadType ? null : wind} />
     </div>
   );
 }

@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
     distanceKm: number;
     date: string;
     priorities?: Priorities;
+    avgSpeedKmh?: number;
     locale?: string;
   };
   try {
@@ -92,6 +93,7 @@ export async function POST(req: NextRequest) {
       distanceKm: body.distanceKm,
       date: body.date,
       priorities,
+      avgSpeedKmh: body.avgSpeedKmh,
       locale,
     });
 

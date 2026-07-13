@@ -15,6 +15,7 @@ export default function OneWayTargetPicker({
   distanceKm,
   date,
   priorities,
+  avgSpeedKmh,
   destination,
   destinationLabel,
   onSelectDestination,
@@ -25,6 +26,7 @@ export default function OneWayTargetPicker({
   distanceKm: number;
   date: string;
   priorities: Priorities;
+  avgSpeedKmh: number;
   destination: LatLon | null;
   destinationLabel: string | null;
   onSelectDestination: (p: LatLon, label: string) => void;
@@ -127,6 +129,7 @@ export default function OneWayTargetPicker({
           distanceKm={distanceKm}
           date={date}
           priorities={priorities}
+          avgSpeedKmh={avgSpeedKmh}
           onPlanned={onScenicRoute}
         />
       )}

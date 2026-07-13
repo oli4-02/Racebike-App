@@ -9,6 +9,7 @@ import type {
   LatLon,
   PlanRequest,
   PlannedRoute,
+  POICategory,
   Priorities,
   RouteLeg,
 } from "./types";
@@ -19,7 +20,8 @@ type ScoredNode = Knooppunt & { distFromStart: number; bearingFromStart: number 
 type NodeFeatureScores = {
   trafficScore: number; // 0..1, higher = fewer nearby traffic signals/crossings
   natureScore: number; // 0..1, higher = more nearby water/forest
-  poiScore: number; // 0..1, higher = more nearby cafes/ice cream
+  poiScore: number; // 0..1, higher = more nearby of the rider's selected stop categories
+  urbanScore: number; // 0..1, higher = more nearby built-up/residential land (bad -- see scoreCandidate)
 };
 
 function clampNum(v: number, min: number, max: number): number {
@@ -38,6 +40,7 @@ const TRAFFIC_RADIUS_M = 300;
 const NATURE_RADIUS_M = 600;
 const POI_RADIUS_M = 500;
 const ATTRACTION_RADIUS_M = 500;
+const URBAN_RADIUS_M = 600;
 
 /**
  * Pre-computes per-node feature scores once so candidate scoring during
@@ -80,10 +83,22 @@ function computeFeatureScores(
     const attractionScore = Math.min(1, attractionCount / 3);
     const poiScore = (poiDensityScore + attractionScore) / 2;
 
-    map.set(node.id, { trafficScore, natureScore, poiScore });
+    const urbanCount = features.urbanPoints.filter(
+      (p) => distance(node, p) <= URBAN_RADIUS_M
+    ).length;
+    const urbanScore = Math.min(1, urbanCount / 3);
+
+    map.set(node.id, { trafficScore, natureScore, poiScore, urbanScore });
   }
   return map;
 }
+
+// Anti-city bias applied regardless of the nature slider's position -- "avoid
+// built-up/residential areas" is treated as a default expectation, not an
+// opt-in extreme, since a candidate surrounded by residential streets is
+// rarely what a rider wants even at a neutral (0.5) nature setting. The
+// nature slider still scales *additional* avoidance on top of this baseline.
+const URBAN_AVOID_BASE_WEIGHT = 0.6;
 
 /**
  * Combines distance-to-target fit with the user's weighted priorities into a
@@ -105,13 +120,15 @@ function scoreCandidate(
     trafficScore: 0.5,
     natureScore: 0,
     poiScore: 0,
+    urbanScore: 0,
   };
 
   return (
     radiusFit * radiusWeight +
     priorities.fewTrafficLights * f.trafficScore +
     priorities.nature * f.natureScore +
-    priorities.poiDensity * f.poiScore
+    priorities.poiDensity * f.poiScore -
+    (URBAN_AVOID_BASE_WEIGHT + priorities.nature) * f.urbanScore
   );
 }
 
@@ -322,6 +339,21 @@ async function reroute(sequence: LatLon[], locale: AppLocale) {
   return { osrmLegs, totalDistanceM, totalDurationS };
 }
 
+/**
+ * OSRM's routed-bike duration assumes a generic city-bike speed, which reads
+ * as wildly optimistic or pessimistic for an actual road-bike rider. When the
+ * rider gives their own average speed, that's what should drive the time
+ * estimate instead.
+ */
+export function durationFromSpeed(
+  totalDistanceM: number,
+  avgSpeedKmh: number | null | undefined,
+  fallbackDurationS: number
+): number {
+  if (!avgSpeedKmh || avgSpeedKmh <= 0) return fallbackDurationS;
+  return ((totalDistanceM / 1000) / avgSpeedKmh) * 3600;
+}
+
 const TOLERANCE = 0.2; // accept +/-20% of target distance
 const MAX_REFINE_ITERATIONS = 3;
 
@@ -333,7 +365,7 @@ const MAX_REFINE_ITERATIONS = 3;
  * sync with the same refine-loop behavior.
  */
 async function finalizeRoute(
-  req: Pick<PlanRequest, "mode" | "start" | "destination" | "direction">,
+  req: Pick<PlanRequest, "mode" | "start" | "destination" | "direction" | "avgSpeedKmh">,
   nodes: Knooppunt[],
   targetDistanceM: number,
   pool: Knooppunt[],
@@ -421,7 +453,7 @@ async function finalizeRoute(
     legs: toRouteLegs(sequence, osrmLegs),
     geometry: combineGeometry(osrmLegs),
     totalDistanceM,
-    totalDurationS,
+    totalDurationS: durationFromSpeed(totalDistanceM, req.avgSpeedKmh, totalDurationS),
   };
 }
 
@@ -429,12 +461,13 @@ async function finalizeRoute(
 async function fetchPoolAndFeatures(
   start: LatLon,
   searchRadius: number,
+  poiCategories: POICategory[] | undefined,
   locale: AppLocale,
   strings: (typeof ROUTE_PLANNER_STRINGS)[AppLocale]
 ): Promise<{ pool: Knooppunt[]; featureScores: Map<number, NodeFeatureScores> }> {
   const [pool, areaFeatures] = await Promise.all([
     fetchKnooppunten(start, searchRadius, locale),
-    fetchAreaFeatures(start, searchRadius, true, locale),
+    fetchAreaFeatures(start, searchRadius, true, poiCategories, locale),
   ]);
   if (pool.length < 3) {
     throw new Error(strings.tooFewNodes);
@@ -462,7 +495,13 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
       ? clampNum(roundTripIdealRadius(approxTargetM, hasDirection) * 1.2, 3000, hasDirection ? 70000 : 30000)
       : clampNum(approxTargetM * 0.9, 3000, 60000);
 
-  const { pool, featureScores } = await fetchPoolAndFeatures(req.start, searchRadius, locale, strings);
+  const { pool, featureScores } = await fetchPoolAndFeatures(
+    req.start,
+    searchRadius,
+    req.poiCategories,
+    locale,
+    strings
+  );
 
   let nodes: Knooppunt[];
   let targetDistanceM: number;
@@ -495,7 +534,7 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
   return finalizeRoute(req, nodes, targetDistanceM, pool, priorities, featureScores, locale);
 }
 
-const ALTERNATIVE_CONCURRENCY = 2;
+const ALTERNATIVE_CONCURRENCY = 3;
 
 /** Runs async tasks with at most `limit` in flight at once, preserving result order. */
 async function mapWithConcurrency<T, R>(
@@ -515,6 +554,35 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+/** Language-agnostic "why this one" tag for a roundtrip alternative; translated to display text by the API route. */
+export type AlternativeHighlight = "nature" | "quiet" | "poiRich" | "direct";
+
+// Below this, none of a route's averaged feature scores stand out enough to
+// claim a specific highlight -- it's presented as the plain, direct option
+// instead of forcing a reason onto an otherwise unremarkable loop.
+const HIGHLIGHT_THRESHOLD = 0.15;
+
+/** Averages each node's precomputed feature scores over a route's chosen knooppunten, then picks its single most distinctive trait. */
+function pickHighlight(
+  nodes: Knooppunt[],
+  featureScores: Map<number, NodeFeatureScores>
+): AlternativeHighlight {
+  if (nodes.length === 0) return "direct";
+  const scores = nodes.map(
+    (n) => featureScores.get(n.id) ?? { trafficScore: 0.5, natureScore: 0, poiScore: 0, urbanScore: 0 }
+  );
+  const avg = (pick: (s: NodeFeatureScores) => number) =>
+    scores.reduce((sum, s) => sum + pick(s), 0) / scores.length;
+
+  const metrics: { key: AlternativeHighlight; value: number }[] = [
+    { key: "nature", value: avg((s) => s.natureScore) },
+    { key: "quiet", value: avg((s) => (s.trafficScore + (1 - s.urbanScore)) / 2) },
+    { key: "poiRich", value: avg((s) => s.poiScore) },
+  ];
+  metrics.sort((a, b) => b.value - a.value);
+  return metrics[0].value >= HIGHLIGHT_THRESHOLD ? metrics[0].key : "direct";
+}
+
 /**
  * Generates several roundtrip route options off a single shared knooppunt
  * pool/feature fetch (one Overpass round-trip instead of `count`), each
@@ -527,7 +595,7 @@ async function mapWithConcurrency<T, R>(
 export async function planRoundTripAlternatives(
   req: PlanRequest,
   count = 5
-): Promise<{ direction: number | null; route: PlannedRoute }[]> {
+): Promise<{ direction: number | null; route: PlannedRoute; highlight: AlternativeHighlight }[]> {
   const priorities: Priorities = { ...DEFAULT_PRIORITIES, ...req.priorities };
   const locale = resolveLocale(req.locale);
   const strings = ROUTE_PLANNER_STRINGS[locale];
@@ -537,7 +605,13 @@ export async function planRoundTripAlternatives(
   // around req.direction), so the search radius always needs the larger
   // out-and-back reach, never the smaller full-loop one.
   const searchRadius = clampNum(roundTripIdealRadius(targetDistanceM, true) * 1.2, 3000, 70000);
-  const { pool, featureScores } = await fetchPoolAndFeatures(req.start, searchRadius, locale, strings);
+  const { pool, featureScores } = await fetchPoolAndFeatures(
+    req.start,
+    searchRadius,
+    req.poiCategories,
+    locale,
+    strings
+  );
 
   const directions: (number | null)[] =
     req.direction === null || req.direction === undefined
@@ -552,7 +626,7 @@ export async function planRoundTripAlternatives(
     const nodes = selectRoundTripNodes(req.start, pool, targetDistanceM, priorities, featureScores, direction);
     if (nodes.length < 2) return null;
     const route = await finalizeRoute(
-      { mode: "roundtrip", start: req.start, direction },
+      { mode: "roundtrip", start: req.start, direction, avgSpeedKmh: req.avgSpeedKmh },
       nodes,
       targetDistanceM,
       pool,
@@ -560,10 +634,12 @@ export async function planRoundTripAlternatives(
       featureScores,
       locale
     );
-    return { direction, route };
+    return { direction, route, highlight: pickHighlight(nodes, featureScores) };
   });
 
-  return results.filter((r): r is { direction: number | null; route: PlannedRoute } => r !== null);
+  return results.filter(
+    (r): r is { direction: number | null; route: PlannedRoute; highlight: AlternativeHighlight } => r !== null
+  );
 }
 
 function indexOfLargestDetour(legs: OsrmLeg[]): number {

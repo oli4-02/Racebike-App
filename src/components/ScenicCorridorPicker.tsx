@@ -11,12 +11,14 @@ export default function ScenicCorridorPicker({
   distanceKm,
   date,
   priorities,
+  avgSpeedKmh,
   onPlanned,
 }: {
   start: LatLon;
   distanceKm: number;
   date: string;
   priorities: Priorities;
+  avgSpeedKmh: number;
   onPlanned: (result: ScenicRoutePlan) => void;
 }) {
   const t = useTranslations("planner.scenic");
@@ -50,6 +52,7 @@ export default function ScenicCorridorPicker({
         distanceKm,
         date,
         priorities,
+        avgSpeedKmh,
         locale,
       });
       onPlanned(result);

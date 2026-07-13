@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
   const locale = resolveLocale(body.locale);
   const t = await getTranslations({ locale, namespace: "api" });
   const tDirections = await getTranslations({ locale, namespace: "planner.form.directions" });
+  const tHighlights = await getTranslations({ locale, namespace: "planner.alternatives.highlights" });
 
   if (!body?.start || !body?.distanceKm || !body?.date) {
     return NextResponse.json({ error: t("invalidRequest") }, { status: 400 });
@@ -52,11 +53,12 @@ export async function POST(req: NextRequest) {
       ALTERNATIVE_COUNT
     );
 
-    const alternatives: RoundTripAlternative[] = results.map(({ direction, route }) => ({
+    const alternatives: RoundTripAlternative[] = results.map(({ direction, route, highlight }) => ({
       direction,
       directionLabel:
         direction === null ? tDirections("any") : tDirections(directionLabelKey(direction)),
       route: windInfo ? { ...route, windInfo } : route,
+      reason: tHighlights(highlight),
     }));
 
     return NextResponse.json({ alternatives });

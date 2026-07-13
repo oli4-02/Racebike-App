@@ -4,7 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { planRouteAlternatives } from "@/lib/apiClient";
-import type { LatLon, PlannedRoute, Priorities, RoundTripAlternative } from "@/lib/types";
+import type { LatLon, PlannedRoute, POICategory, Priorities, RoundTripAlternative } from "@/lib/types";
 
 const MiniRouteMap = dynamic(() => import("./MiniRouteMap"), {
   ssr: false,
@@ -25,6 +25,8 @@ export default function RouteAlternativesPicker({
   date,
   priorities,
   direction,
+  avgSpeedKmh,
+  poiCategories,
   onPlanned,
 }: {
   start: LatLon;
@@ -32,6 +34,8 @@ export default function RouteAlternativesPicker({
   date: string;
   priorities: Priorities;
   direction: number | null;
+  avgSpeedKmh: number;
+  poiCategories: POICategory[];
   onPlanned: (route: PlannedRoute) => void;
 }) {
   const t = useTranslations("planner.alternatives");
@@ -47,7 +51,7 @@ export default function RouteAlternativesPicker({
     setSelectedIndex(null);
     try {
       const result = await planRouteAlternatives(
-        { start, mode: "roundtrip", distanceKm, date, priorities, direction },
+        { start, mode: "roundtrip", distanceKm, date, priorities, direction, avgSpeedKmh, poiCategories },
         locale
       );
       setAlternatives(result);
@@ -89,6 +93,7 @@ export default function RouteAlternativesPicker({
                     {formatDuration(alt.route.totalDurationS)}
                   </span>
                 </div>
+                <span className="text-xs text-meewind-accent">{alt.reason}</span>
                 <button
                   type="button"
                   onClick={() => {

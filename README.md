@@ -58,7 +58,20 @@ darum herum.
   Distanz der Originaltour wird beim Auswählen als Ziel-Distanz übernommen,
   die Feinroute aber dynamisch über Knotenpunkte/OSRM berechnet — kein
   stures Nachfahren der Original-Wegpunkte
-- POIs entlang der Route: Tankstelle, Supermarkt, Eisdiele, Café
+- POIs entlang der Route: Tankstelle, Supermarkt, Eisdiele, Café — die
+  ausgewählten Kategorien beeinflussen jetzt auch die Knotenpunkt-Auswahl
+  selbst (Rundtour/One-Way), nicht nur welche Marker angezeigt werden (siehe
+  "POI-Kategorien beeinflussen die Routenwahl" unten)
+- **Ø-Geschwindigkeit**: eigener Regler statt OSRM-Rad-Profil-Schätzung für
+  die Fahrzeit-Anzeige, gilt für alle Tourtypen (siehe "Fahrzeit nach
+  Ø-Geschwindigkeit" unten)
+- **Straßentyp auf der Karte**: Umschalter zwischen Wind-Einfärbung und
+  Straßentyp-Einfärbung (Radweg/Wohnstraße/Hauptstraße/Sonstige) direkt auf
+  der Route, nicht nur als Aggregat-Balken (siehe "Straßentyp-Transparenz"
+  unten)
+- Anti-Stadt-Bias: Knotenpunkt-Auswahl meidet jetzt standardmäßig
+  Wohn-/Gewerbe-/Industriegebiete, nicht nur bei hochgedrehtem
+  Natur-Regler (siehe "Anti-Stadt-Bias" unten)
 - GPX-Export (Track + POI-Waypoints) für Garmin Connect / Strava
 - Mobile-first responsives Layout
 
@@ -226,6 +239,55 @@ draußen laden konnten. Der Cap ist jetzt bei gewählter Richtung 70 km statt
 30 km, und `planRoundTripAlternatives()` übergibt pro Variante deren eigene
 Richtung an `finalizeRoute` statt der ursprünglichen Anfrage-Richtung.
 
+Auch nach diesem Fix blieb ein zweiter Effekt bestehen: die Routen fuhren
+zwar in die gewählte Richtung, aber der Weg dorthin (v. a. nah am Start) lag
+oft stark in Wohngebieten, weil die Knotenpunkt-Bewertung keinerlei
+Anti-Stadt-Signal kannte — siehe "Anti-Stadt-Bias" unten.
+
+### Anti-Stadt-Bias: Wohngebiete standardmäßig meiden
+
+`fetchAreaFeatures()` (in `overpass.ts`) fragt jetzt zusätzlich
+`landuse=residential/commercial/industrial/retail`-Flächen ab (in derselben
+kombinierten Overpass-Anfrage, kein zusätzlicher Roundtrip) und liefert deren
+Zentroide als `urbanPoints`. `computeFeatureScores()` (in `routePlanner.ts`)
+verdichtet das analog zu `natureScore` zu einem `urbanScore` pro
+Knotenpunkt-Kandidat. In `scoreCandidate()` fließt das mit einem
+**Grundgewicht von 0.6 unabhängig vom Natur-Regler** negativ ein — "Stadt
+meiden" ist also ein Standardverhalten, keine Regler-Extremstellung, die man
+erst hochdrehen muss; der Natur-Regler skaliert zusätzlich obendrauf
+(`URBAN_AVOID_BASE_WEIGHT + priorities.nature`). Das gilt für Rundtour- und
+One-Way-Knotenpunkt-Auswahl gleichermaßen (`scoreCandidate` ist geteilter
+Code), nicht aber für die Zielort-Bewertung in `/api/scenic-route` (dort ist
+ein gewisses Maß an Wohnbebauung am Etappenziel selbst normal und kein
+Vermeidungsgrund).
+
+### Fahrzeit nach Ø-Geschwindigkeit statt OSRM-Rad-Profil-Schätzung
+
+OSRMs `routed-bike`-Profil nimmt eine generische Stadtrad-Geschwindigkeit an,
+die für ein Rennrad unrealistisch wirkt (zu langsam oder zu schnell, je nach
+Fahrer). Ein neuer Regler ("Ø-Geschwindigkeit", 15–40 km/h, Default 27) lässt
+die Fahrzeit stattdessen direkt aus `Distanz / Geschwindigkeit` berechnen
+(`durationFromSpeed()` in `routePlanner.ts`), angewendet am Ende von
+`finalizeRoute()` und — für den Sonderfall der Rückenwind-Umkehr-Nachroutung
+in `/api/plan` — dort ebenfalls explizit. Gilt für alle Tourtypen (Rundtour,
+One-Way, 5 Varianten, Landschafts-Route, Signature-Route), da alle über
+`planRoute()`/`finalizeRoute()` laufen bzw. den Parameter durchreichen.
+
+### POI-Kategorien beeinflussen die Routenwahl, nicht nur die Marker
+
+Die POI-Checkboxen (Tankstelle/Supermarkt/Eisdiele/Café) haben bisher nur
+gesteuert, welche Marker nach der Routenberechnung zusätzlich angezeigt
+werden — die Routenwahl selbst hat immer nur eine feste Café+Eisdiele-Dichte
+berücksichtigt (Tankstelle/Supermarkt flossen serverseitig gar nicht in die
+Bewertung ein). `fetchAreaFeatures()` nimmt jetzt die tatsächlich vom Nutzer
+gewählten Kategorien entgegen und baut die Overpass-POI-Abfrage dynamisch
+daraus auf (`POI_FILTERS`, wiederverwendet aus der bestehenden
+Marker-Abfrage); `PlanRequest.poiCategories` reicht die Auswahl vom Frontend
+bis in die Knotenpunkt-Bewertung durch. Betrifft Rundtour, One-Way und die
+5 Routen-Varianten; Landschafts-/Signature-Route nutzen weiterhin die
+Standardkategorien (cafe + ice_cream + fuel + supermarket), da ihr Ablauf
+keine POI-Auswahl im Formular anzeigt.
+
 ### Performance: weniger Netzwerk-Roundtrips pro `/api/plan`-Aufruf
 
 - Die Windvorhersage (Open-Meteo) wird jetzt parallel zu `planRoute()`
@@ -240,21 +302,46 @@ Richtung an `finalizeRoute` statt der ursprünglichen Anfrage-Richtung.
 - `routeChain()` (in `osrm.ts`) sendet alle Wegpunkte einer Route in einem
   einzigen OSRM-Multi-Waypoint-Request (`steps=true`) statt einem sequenziellen
   Request pro Teilstück.
+- Die POI-Suche entlang der fertigen Route (`fetchPois`) blockiert nicht mehr
+  die Lade-Anzeige: `page.tsx` zeigt die Route sofort an und lädt die
+  POI-Marker nebenbei nach (`void loadPois(...)` statt `await`), für alle
+  Tourtypen (Rundtour, One-Way, Varianten, Landschafts-/Signature-Route).
+- `planRoundTripAlternatives()` berechnet die 5 Varianten jetzt mit
+  Nebenläufigkeit 3 statt 2 (`ALTERNATIVE_CONCURRENCY`).
+- Adresssuche (`AddressSearch.tsx`): das Auswählen eines Suchergebnisses hat
+  bisher `setQuery(displayName)` ausgelöst, was denselben Debounce-Suche-Effekt
+  erneut angestoßen und das Dropdown Sekundenbruchteile später mit denselben
+  Treffern wieder geöffnet hat — für den Nutzer sah das aus, als hätte der
+  erste Klick nichts bewirkt und man müsse ein zweites Mal klicken (der erste
+  Klick hatte den Startpunkt aber schon korrekt gesetzt). Ein Ref-Flag
+  überspringt die Suche für genau den einen durch die Auswahl selbst
+  ausgelösten Effekt-Durchlauf.
 
 ### Straßentyp-Transparenz (Radweg / Wohnstraße / Hauptstraße)
 
 Da OSRM-Routing über den öffentlichen Demo-Server nicht steuert, wie stark
 Wohnstraßen vermieden werden (dafür bräuchte es ein eigenes OSRM-Profil oder
 eine aufwändige Overpass-Polygon-Vermeidung — beides über den aktuellen Scope
-hinaus), zeigt Meewind stattdessen transparent an, welche Art Straße/Weg eine
-geplante Route tatsächlich nutzt: `fetchRoadTypeBreakdown()` (in
-`overpass.ts`) fragt für bis zu 150 gleichmäßig über die Routen-Geometrie
-verteilte Punkte alle `highway=*`-Ways im 20m-Korridor ab (`out geom;`) und
-gewichtet sie längenbasiert in vier Buckets (Radweg / Wohnstraße,
-Spielstraße, Fußgängerzone / Hauptstraße / Sonstige). `/api/road-types`
-stellt das als Endpoint bereit, `RouteSummary` lädt es client-seitig für die
-gerade angezeigte Route (nicht für die 5 Routen-Varianten, um deren Vorschau
-nicht zu verlangsamen) und zeigt es als farbigen Balken mit Legende an.
+hinaus, siehe "Anti-Stadt-Bias" oben für den Teil, der stattdessen umgesetzt
+wurde), zeigt Meewind zusätzlich transparent an, welche Art Straße/Weg eine
+geplante Route tatsächlich nutzt — und zwar nicht nur als Gesamt-Prozentsatz,
+sondern auch direkt auf der Karte, abschnittsweise: `fetchRoadTypeBreakdown()`
+(in `overpass.ts`) fragt für bis zu 150 gleichmäßig über die Routen-Geometrie
+verteilte Punkte alle `highway=*`-Ways im 20m-Korridor ab (`out geom;`),
+matcht dann jeden dieser Sample-Punkte auf den nächstgelegenen Way-Vertex
+(Cache-freundliche Grobfilterung per Lat/Lon-Differenz vor dem eigentlichen
+Distanz-Check) und baut daraus zusammenhängende, gleich klassifizierte
+Segmente (`RoadTypeSegment[]`) — nicht klassifizierbare Lücken übernehmen die
+letzte bekannte Klassifikation, damit kurze Aussetzer in den Overpass-Daten
+keine Segmente unnötig zerstückeln. Die Gesamt-Prozentsatz-Aufteilung wird
+aus der tatsächlich klassifizierten Strecke berechnet (nicht mehr aus der
+Gesamtlänge der gefundenen Ways), was sie konsistent mit der Kartenanzeige
+macht. `/api/road-types` liefert beides (`breakdown` + `segments`);
+`RouteSummary` holt es client-seitig für die gerade angezeigte Route (nicht
+für die 5 Routen-Varianten, um deren Vorschau nicht zu verlangsamen) und
+reicht die Segmente per Callback an `page.tsx` weiter, das sie der `RouteMap`
+gibt. Ein Umschalter oben links auf der Karte wechselt zwischen
+Wind-Einfärbung (Standard) und Straßentyp-Einfärbung der Route.
 
 ### Wie die Prioritäten-Regler wirken
 
@@ -396,6 +483,19 @@ eigenen Zuhause, sondern am Korridor selbst:
   50 km bei "variabel"), keine echte Route — das würde für 19 Einträge in
   einer passiv durchsuchbaren Liste 19 zusätzliche Overpass-/OSRM-Aufrufe
   bedeuten, nur um eine Vorschau zu zeigen.
+- Der Anti-Stadt-Bias (`urbanScore`) ist eine *Bewertungs*-Gewichtung bei der
+  Knotenpunkt-Auswahl, keine harte Routing-Vermeidung — OSRM selbst bekommt
+  keine Anweisung, Wohnstraßen zu meiden, es werden nur Knotenpunkte mit
+  weniger Wohn-/Gewerbebebauung in der Nähe bevorzugt ausgewählt. Auf der
+  "letzten Meile" nah am Startpunkt in einer Großstadt sind Wohnstraßen daher
+  weiterhin teils unvermeidbar. Eine echte Vermeidung bräuchte ein eigenes
+  OSRM-Profil oder eine Overpass-Polygon-basierte Routenbewertung.
+- Die Straßentyp-Klassifizierung pro Kartenabschnitt matcht Sample-Punkte auf
+  den nächstgelegenen Way-Vertex (nicht auf die exakte Projektion auf die
+  Wegkante) und deckt nur `highway=*`-Tags ab, die innerhalb von 30m eines
+  Sample-Punkts liegen — bei sehr grob digitalisierten Wegen oder Lücken in
+  den OSM-Daten kann ein Abschnitt daher als "Sonstige" statt korrekt
+  klassifiziert erscheinen.
 
 ## Setup
 

@@ -125,6 +125,7 @@
       "distanceScenic": "Desired ride length within the corridor",
       "distanceOneway": "Search distance for destination",
       "date": "Ride date",
+      "avgSpeed": "Average speed (for the time estimate)",
       "poiTitle": "Points of interest",
       "poiFuel": "⛽ Fuel station",
       "poiSupermarket": "🛒 Supermarket",
@@ -177,7 +178,13 @@
       "loading": "Calculating variants…",
       "error": "Could not load the variants.",
       "choose": "Choose this route",
-      "chosen": "Chosen ✓"
+      "chosen": "Chosen ✓",
+      "highlights": {
+        "nature": "Most nature (water & forest)",
+        "quiet": "Quietest route (least traffic/residential)",
+        "poiRich": "Most stops along the way",
+        "direct": "Direct, straightforward loop"
+      }
     },
     "scenic": {
       "loading": "Loading corridors…",
@@ -211,7 +218,9 @@
       "loading": "Loading map…",
       "start": "Start",
       "home": "Home",
-      "destination": "Destination"
+      "destination": "Destination",
+      "colorByWind": "Wind",
+      "colorByRoadType": "Road type"
     },
     "home": {
       "scenicOutboundTitle": "Outbound (home → entry)",

@@ -125,6 +125,7 @@
       "distanceScenic": "Gewünschte Fahrlänge im Korridor",
       "distanceOneway": "Such-Distanz für Ziel",
       "date": "Fahrtdatum",
+      "avgSpeed": "Ø-Geschwindigkeit (für Fahrzeit-Schätzung)",
       "poiTitle": "Points of Interest",
       "poiFuel": "⛽ Tankstelle",
       "poiSupermarket": "🛒 Supermarkt",
@@ -177,7 +178,13 @@
       "loading": "Berechne Varianten…",
       "error": "Varianten konnten nicht geladen werden.",
       "choose": "Diese Route wählen",
-      "chosen": "Ausgewählt ✓"
+      "chosen": "Ausgewählt ✓",
+      "highlights": {
+        "nature": "Meiste Natur (Wasser & Wald)",
+        "quiet": "Ruhigste Route (wenig Verkehr/Wohngebiet)",
+        "poiRich": "Die meisten Stopps unterwegs",
+        "direct": "Direkte, unkomplizierte Runde"
+      }
     },
     "scenic": {
       "loading": "Lade Korridore…",
@@ -211,7 +218,9 @@
       "loading": "Karte wird geladen…",
       "start": "Start",
       "home": "Zuhause",
-      "destination": "Ziel"
+      "destination": "Ziel",
+      "colorByWind": "Wind",
+      "colorByRoadType": "Straßentyp"
     },
     "home": {
       "scenicOutboundTitle": "Hinfahrt (Zuhause → Einstieg)",

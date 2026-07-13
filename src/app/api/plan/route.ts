@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { NextRequest, NextResponse } from "next/server";
-import { combineGeometry, planRoute, toRouteLegs } from "@/lib/routePlanner";
+import { combineGeometry, durationFromSpeed, planRoute, toRouteLegs } from "@/lib/routePlanner";
 import { routeChain } from "@/lib/osrm";
 import { resolveLocale } from "@/lib/resolveLocale";
 import {
@@ -73,13 +73,15 @@ export async function POST(req: NextRequest) {
           const reversedNodes = [...route.knooppunten].reverse();
           const sequence = [body.start, ...reversedNodes, body.start];
           const osrmLegs = await routeChain(sequence, locale);
+          const reversedDistanceM = osrmLegs.reduce((s, l) => s + l.distanceM, 0);
+          const reversedDurationS = osrmLegs.reduce((s, l) => s + l.durationS, 0);
           route = {
             ...route,
             knooppunten: reversedNodes,
             legs: toRouteLegs(sequence, osrmLegs),
             geometry: combineGeometry(osrmLegs),
-            totalDistanceM: osrmLegs.reduce((s, l) => s + l.distanceM, 0),
-            totalDurationS: osrmLegs.reduce((s, l) => s + l.durationS, 0),
+            totalDistanceM: reversedDistanceM,
+            totalDurationS: durationFromSpeed(reversedDistanceM, body.avgSpeedKmh, reversedDurationS),
           };
         }
 

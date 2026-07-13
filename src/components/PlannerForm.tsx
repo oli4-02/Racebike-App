@@ -35,6 +35,8 @@ export default function PlannerForm(props: {
   setPoiCategories: (v: POICategory[]) => void;
   direction: number | null;
   setDirection: (v: number | null) => void;
+  avgSpeedKmh: number;
+  setAvgSpeedKmh: (v: number) => void;
   onSubmit: () => void;
   loading: boolean;
   canSubmit: boolean;
@@ -54,6 +56,8 @@ export default function PlannerForm(props: {
     setPoiCategories,
     direction,
     setDirection,
+    avgSpeedKmh,
+    setAvgSpeedKmh,
     onSubmit,
     loading,
     canSubmit,
@@ -159,6 +163,22 @@ export default function PlannerForm(props: {
           value={date}
           onChange={(e) => setDate(e.target.value)}
           className="w-full rounded-md border border-meewind-border bg-meewind-bg-raised px-3 py-2 text-sm text-meewind-fg [color-scheme:dark]"
+        />
+      </div>
+
+      <div>
+        <label className="flex justify-between text-sm font-medium mb-1">
+          <span>{t("avgSpeed")}</span>
+          <span>{avgSpeedKmh} km/h</span>
+        </label>
+        <input
+          type="range"
+          min={15}
+          max={40}
+          step={1}
+          value={avgSpeedKmh}
+          onChange={(e) => setAvgSpeedKmh(Number(e.target.value))}
+          className="w-full"
         />
       </div>
 

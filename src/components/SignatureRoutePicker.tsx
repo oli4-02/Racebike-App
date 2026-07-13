@@ -30,6 +30,7 @@ export default function SignatureRoutePicker({
   distanceKm,
   date,
   priorities,
+  avgSpeedKmh,
   onDistanceKmChange,
   onPlanned,
 }: {
@@ -37,6 +38,7 @@ export default function SignatureRoutePicker({
   distanceKm: number;
   date: string;
   priorities: Priorities;
+  avgSpeedKmh: number;
   onDistanceKmChange: (km: number) => void;
   onPlanned: (result: SignatureRoutePlan) => void;
 }) {
@@ -73,6 +75,7 @@ export default function SignatureRoutePicker({
         distanceKm: usedDistanceKm,
         date,
         priorities,
+        avgSpeedKmh,
         locale,
       });
       onPlanned(result);

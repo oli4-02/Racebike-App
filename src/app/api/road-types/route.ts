@@ -23,6 +23,6 @@ export async function POST(req: NextRequest) {
 
   // Best-effort: Overpass failures here shouldn't read as a route-planning
   // error, just as "no breakdown available" for this ride.
-  const breakdown = await fetchRoadTypeBreakdown(body.geometry, locale).catch(() => null);
-  return NextResponse.json({ breakdown });
+  const result = await fetchRoadTypeBreakdown(body.geometry, locale).catch(() => null);
+  return NextResponse.json({ breakdown: result?.breakdown ?? null, segments: result?.segments ?? [] });
 }
