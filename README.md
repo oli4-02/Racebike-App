@@ -442,7 +442,7 @@ API-Keys nicht im Browser offenzulegen):
 Kernlogik in `src/lib/`:
 - `routePlanner.ts` – wählt Knotenpunkte rund um den Start (Rundtour) bzw.
   entlang einer festen Ziel-Richtung (One-Way) und lässt sie über OSRM
-  verbinden; passt die Auswahl iterativ an, bis die Zieldistanz (±20%)
+  verbinden; passt die Auswahl iterativ an, bis die Zieldistanz (±8%)
   erreicht ist. Die Kandidatenwahl je Sektor/Schritt ist ein gewichteter Score
   aus Distanz-Passung und den Prioritäten-Reglern (siehe unten)
 - `wind.ts` – Rückenwind-Bewertung beider Fahrtrichtungen, plus
@@ -537,8 +537,9 @@ tatsächlich besser abschneidet, meist deutlich weniger als 5).
 
 Diese Richtungs-Logik galt anfangs nur für die initiale Knotenpunkt-Auswahl:
 die "Refine"-Schleife in `finalizeRoute()`, die eine zu kurz/lang geratene
-Route nachträglich durch Hinzufügen/Entfernen einzelner Knotenpunkte auf die
-Zieldistanz bringt (±20% Toleranz, bis zu 3 Iterationen), hat die Richtung
+Route nachträglich durch Hinzufügen/Entfernen von Knotenpunkten auf die
+Zieldistanz bringt (±8% Toleranz, bis zu 5 Iterationen — siehe
+"Distanz-Genauigkeit" weiter unten für die aktuelle Fassung), hat die Richtung
 zunächst ignoriert und beim Verlängern immer den Vollkreis-Radius ohne
 Kegel-Filter benutzt — genau der häufige Fall, in dem eine gerichtete Route
 nach dem ersten OSRM-Routing noch zu kurz war, wurde also wieder Richtung
@@ -557,6 +558,48 @@ Auch nach diesem Fix blieb ein zweiter Effekt bestehen: die Routen fuhren
 zwar in die gewählte Richtung, aber der Weg dorthin (v. a. nah am Start) lag
 oft stark in Wohngebieten, weil die Knotenpunkt-Bewertung keinerlei
 Anti-Stadt-Signal kannte — siehe "Anti-Stadt-Bias" unten.
+
+### Distanz-Genauigkeit: ±8% statt ±20%, und tatsächlich durchgesetzt
+
+Ein Nutzer-Report zeigte 2 von 5 Rundtour-Varianten bei einer Anfrage von
+100 km, die auf 148 km bzw. 188 km landeten — 48% bzw. 88% über der
+Zieldistanz, obwohl die Refine-Schleife in `finalizeRoute()` eine ±20%-Toleranz
+garantieren sollte. Ursache: Die Schleife hat pro Durchlauf immer nur *einen*
+Knotenpunkt entfernt/hinzugefügt (`indexOfLargestDetour`, ein Reroute pro
+Iteration) und war auf 3 Iterationen gedeckelt — reichte die initiale
+Kandidatenauswahl (z. B. weil ein Richtungs-Kegel über wenig erschlossenes
+Gebiet oder Wasser zeigt und daher kaum Knotenpunkte liefert) weit über das
+Ziel hinaus, konnten 3 Ein-Knoten-Schritte das nie einholen. Schlimmer noch:
+lief die Schleife aus, ohne die Toleranz zu erreichen, wurde die zu lange
+Route trotzdem stillschweigend zurückgegeben — es gab keine Prüfung am Ende.
+
+Behoben in `finalizeRoute()`:
+- **Toleranz verschärft**: `TOLERANCE` von 0,2 auf 0,08 (±8%).
+- **Mehrere Knotenpunkte pro Durchlauf statt einem**: `dropCount`/`addCount`
+  skalieren jetzt mit der gemessenen Abweichung (gedämpft auf 70% des
+  gemessenen Fehlers, `REFINE_DAMPING`, um Überkorrektur/Oszillieren zu
+  vermeiden) — eine Route, die 88% zu lang ist, wirft in einem einzigen
+  Durchlauf gleich mehrere der Knotenpunkte mit dem größten Umweg
+  (`indicesOfLargestDetours`) raus statt nur den einen schlimmsten, und
+  braucht dadurch typischerweise 2-3 statt (erfolglos) 3 Iterationen.
+  `MAX_REFINE_ITERATIONS` dabei leicht erhöht (3 → 5), da die engere Toleranz
+  mehr Feinschliff-Durchläufe nahe der Zielgrenze brauchen kann.
+- **Harte Durchsetzung statt stillem Ignorieren**: Erreicht eine Route nach
+  allen Iterationen die Toleranz immer noch nicht, wirft `finalizeRoute()`
+  jetzt einen Fehler (`distanceToleranceFailed`), statt sie trotzdem
+  zurückzugeben. Für die Einzelroute (`planRoute()`) heißt das ein ehrlicher
+  Fehler statt einer Route, die ihr eigenes Distanz-Versprechen bricht; bei
+  den 5 Varianten (`planRoundTripAlternatives()`) wird die betroffene
+  Richtung einfach übersprungen (`try/catch` um den Aufruf, `null` gefiltert)
+  — die anderen Kandidaten sind davon unabhängig.
+
+Diese Verifikation lief nur als eigenständige numerische Nachrechnung der
+Korrektur-Formel (kein Zugriff auf echtes Overpass/OSRM in dieser Sandbox):
+für einen 8-Knoten-Fall bei 88% Überschuss dropt der erste Durchlauf 5 der 8
+Knoten (statt 1), landet grob bei ~30% Unterschuss, der zweite Durchlauf legt
+1 Knoten nach und landet innerhalb der ±8%-Toleranz — zwei statt (erfolglos)
+drei Iterationen. Eine Live-Bestätigung mit echten Knotenpunkt-/Straßendaten
+war nicht möglich und steht noch aus.
 
 ### Anti-Stadt-Bias: Wohngebiete standardmäßig meiden
 
@@ -854,6 +897,21 @@ eigenen Zuhause, sondern am Korridor selbst:
   den Routen-Mittelpunkt existiert — in sehr ländlichen oder dünn auf
   Wikipedia dokumentierten Gegenden bleibt die Fläche dann leer, statt ein
   falsches oder generisches Bild zu erzwingen.
+- Die ±8%-Distanztoleranz wird jetzt hart durchgesetzt (siehe
+  "Distanz-Genauigkeit" oben) — das heißt aber auch, dass eine einzelne
+  Rundtour-Variante (bei den 5 Varianten) oder im Extremfall die gesamte
+  Einzelroute fehlschlagen kann, wenn der Knotenpunkt-Pool für eine
+  bestimmte Richtung/Distanz-Kombination einfach keine Route innerhalb der
+  Toleranz hergibt (z. B. eine sehr enge Richtungs-Vorgabe an einer Küste
+  mit wenigen Knotenpunkten) — das ist bewusst so: eine fehlende Variante
+  ist besser als eine, die ihr eigenes Distanz-Versprechen leise bricht.
+- Die Overpass-Anfrage-Timeouts wurden bewusst auf "schnell und klar
+  scheitern" statt "lange durchhalten" umgestellt (siehe "Umgang mit
+  Overpass-Überlastung" unten) — bei einer wirklich lang anhaltenden
+  Überlastung des öffentlichen Diensts (nicht nur einer kurzen Spitze)
+  kann das dazu führen, dass eine Anfrage schneller fehlschlägt, die mit
+  mehr Geduld eventuell doch noch durchgekommen wäre. Für die übliche
+  Nutzung (kein Dauer-Ausfall) überwiegt der Geschwindigkeitsgewinn klar.
 
 ## Setup
 
@@ -892,14 +950,16 @@ Overpass, OSRM und Open-Meteo benötigen keine Keys.
 Der öffentliche Overpass-Dienst ist ein geteilter Community-Server ohne SLA
 und reagiert bei hoher Last mit 429 (Rate-Limit) oder 502/503/504
 (überlastet/Gateway-Timeout). `runOverpassQuery` in `src/lib/overpass.ts`
-geht damit so um:
+probiert dafür bis zu drei Mirrors durch:
 
-- Bei 429 wird einmal mit kurzer Wartezeit (Retry-After-Header oder 2s
-  Standard) auf demselben Server erneut versucht, bevor zum nächsten Mirror
-  gewechselt wird — Rate-Limits erholen sich meist innerhalb weniger Sekunden.
-- Bei 502/503/504 wird sofort zum nächsten Mirror gewechselt statt erneut zu
-  versuchen, da eine überlastete/zu komplexe Anfrage durch sofortiges
-  Wiederholen selten schneller wird.
+- `overpass-api.de`, `lz4.overpass-api.de` (dessen Lastverteilungs-Frontend)
+  und `overpass.kumi.systems`. Wichtiger als "drei statt zwei Server" ist
+  dabei, *wessen* Server: die ersten beiden laufen beim selben Betreiber und
+  können unter echter Last beide gleichzeitig überlastet/rate-limitiert
+  sein (keine wirklich unabhängige Kapazität); Kumi Systems betreibt eine
+  eigenständige, separat gehostete Instanz — der einzige der drei Mirrors,
+  der bei einer Lastspitze der `overpass-api.de`-Infrastruktur tatsächlich
+  noch unabhängig davon verfügbar sein kann.
 - Fehlermeldungen zeigen nicht mehr die rohe HTML-Fehlerseite an (nur
   störender Markup-Müll), sondern eine kurze Status-Erklärung, plus einen
   Hinweis "Bitte in ein paar Sekunden erneut versuchen", wenn alle Fehler auf
@@ -909,30 +969,43 @@ geht damit so um:
   Anfragen zusammen (`fetchAreaFeatures(..., includeAttractions=true)`), um
   die Serverlast pro Routenplanung zu reduzieren.
 
-**Nach einem Nutzer-Report (alle 3 Anfragen — 504, 429, dann ein
-Fetch-Fehler — schlugen an einem Abend fehl) zwei weitere Verbesserungen:**
+**Nach einem Nutzer-Report, dass eine Routenplanung über 3 Minuten dauerte,
+wurde die Retry-Strategie deutlich zurückgebaut statt weiter ausgebaut.**
+Eine frühere Fassung retryte 429 mit Wartezeit auf demselben Server und
+probierte bei komplettem Fehlschlag die ganze Mirror-Liste ein zweites Mal
+— gut gemeint (kurzlebige Lastspitzen aussitzen), aber bei 30s
+Anfrage-Timeout, bis zu 2 Versuchen pro Server und einer zweiten vollen
+Runde konnte ein wirklich zäher Moment (Anfragen, die nahe am Timeout
+hängen statt schnell mit einem Fehler zu antworten) sich auf mehrere
+Minuten aufsummieren, bevor der Nutzer überhaupt eine Rückmeldung sah.
+Jetzt gilt bewusst "schnell und klar scheitern" statt "lange und leise
+warten":
 
-- Ein dritter Mirror (`overpass.kumi.systems`) ist jetzt in
-  `OVERPASS_ENDPOINTS` gelistet. Wichtiger als "noch ein Server" ist dabei,
-  *wessen* Server: `overpass-api.de` und sein Lastverteilungs-Frontend
-  `lz4.overpass-api.de` laufen beim selben Betreiber — unter echter Last
-  können beide gleichzeitig überlastet/rate-limitiert sein (genau das aus
-  dem Report: 504 auf dem einen, 429 direkt danach auf dem "anderen"), weil
-  sie sich vermutlich dieselbe Backend-Kapazität teilen. Kumi Systems
-  betreibt eine eigenständige, unabhängige öffentliche Instanz — der
-  einzige der drei Mirrors, der bei einer Lastspitze der `overpass-api.de`-
-  Infrastruktur tatsächlich unabhängig davon noch verfügbar sein kann.
-- Schlägt die komplette Mirror-Liste einmal komplett fehl, wartet
-  `runOverpassQuery` jetzt kurz (3s) und probiert die ganze Liste ein
-  zweites Mal (`MAX_ROUNDS = 2`), bevor der Fehler tatsächlich an den Nutzer
-  geht. Die Fehlermeldung selbst rät ja schon "in ein paar Sekunden erneut
-  versuchen" — dieser zweite Durchlauf macht genau das automatisch, statt
-  den Nutzer bei einer meist kurzlebigen Lastspitze zu einem manuellen
-  Neuversuch zu zwingen.
+- `runOverpassQuery` probiert jeden der drei Mirrors nur noch **genau
+  einmal**, in Reihenfolge, und wechselt bei jedem Fehler (429, 502/503/504,
+  Timeout, Netzwerkfehler — ausnahmslos) sofort zum nächsten, statt auf
+  demselben Server zu warten und erneut zu versuchen. Kein zweiter
+  Durchlauf über die ganze Liste mehr.
+- Das clientseitige Anfrage-Timeout ist von 30s auf 18s reduziert, und die
+  serverseitigen `[timeout:…]`-Werte in den Overpass-Queries selbst von
+  20-30s auf einheitlich 15s — Overpass soll selbst schneller aufgeben und
+  einen sauberen Fehler zurückgeben, statt dass der Client die ganze Zeit
+  auf eine möglicherweise ohnehin zu komplexe Anfrage wartet. Das
+  clientseitige Timeout liegt bewusst ein paar Sekunden über dem
+  serverseitigen, als Sicherheitsnetz für eine hängende Verbindung, die
+  Overpass' eigenes Timeout nie erreicht (nicht als primärer Abbruch).
+- Damit ist die Overpass-Phase jetzt auf ca. 3 × 18s ≈ 54s im absoluten
+  Worst Case begrenzt (alle drei Mirrors hängen tatsächlich bis zum
+  Timeout) statt der vorherigen mehreren Minuten — im typischen Fall
+  (irgendein Mirror antwortet normal) bleibt es bei wenigen Sekunden.
 
 Das sind Abmilderungen, keine Garantie — bei anhaltender Überlastung des
 öffentlichen Dienstes (nicht nur einer kurzen Spitze) hilft nur Warten oder
-ein eigener (selbst gehosteter oder kommerzieller) Overpass-Endpunkt.
+ein eigener (selbst gehosteter oder kommerzieller) Overpass-Endpunkt. Ein
+schneller, klarer Fehler ist dabei bewusst das Ziel, nicht eine Garantie,
+dass jede Anfrage bei Überlastung trotzdem noch durchkommt — das war exakt
+der Trade-off, den der vorherige, länger wartende Ansatz falsch getroffen
+hatte.
 
 ### Performance: ein OSRM-Request statt vieler pro Route
 

@@ -150,25 +150,36 @@ export const NS_STRINGS: Record<
 
 export const ROUTE_PLANNER_STRINGS: Record<
   AppLocale,
-  { onewayDestinationRequired: string; tooFewNodes: string; noSensibleRoute: string }
+  {
+    onewayDestinationRequired: string;
+    tooFewNodes: string;
+    noSensibleRoute: string;
+    distanceToleranceFailed: string;
+  }
 > = {
   de: {
     onewayDestinationRequired: "Für eine One-Way-Tour wird ein Ziel benötigt.",
     tooFewNodes:
       "Zu wenige Knotenpunkte des Radnetzwerks in der Nähe gefunden. Bitte einen anderen Startpunkt oder eine größere Distanz wählen.",
     noSensibleRoute: "Es konnte keine sinnvolle Route aus den gefundenen Knotenpunkten gebaut werden.",
+    distanceToleranceFailed:
+      "Für diese Distanz/Richtung konnte keine Route innerhalb von ±8% der Zieldistanz gefunden werden. Bitte Distanz oder Richtung leicht anpassen.",
   },
   en: {
     onewayDestinationRequired: "A one-way trip requires a destination.",
     tooFewNodes:
       "Too few cycle-network nodes found nearby. Please pick a different start point or a larger distance.",
     noSensibleRoute: "Could not build a sensible route from the nodes found.",
+    distanceToleranceFailed:
+      "Could not find a route within ±8% of the target distance for this distance/direction. Please adjust the distance or direction slightly.",
   },
   nl: {
     onewayDestinationRequired: "Voor een enkele reis is een bestemming vereist.",
     tooFewNodes:
       "Te weinig knooppunten van het fietsnetwerk in de buurt gevonden. Kies een ander startpunt of een grotere afstand.",
     noSensibleRoute: "Er kon geen zinvolle route worden opgebouwd uit de gevonden knooppunten.",
+    distanceToleranceFailed:
+      "Er kon geen route binnen ±8% van de doelafstand worden gevonden voor deze afstand/richting. Pas de afstand of richting iets aan.",
   },
 };
 

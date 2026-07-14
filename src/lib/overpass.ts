@@ -51,34 +51,22 @@ function elementPoint(el: OverpassElement): LatLon | null {
   return null;
 }
 
-// 429 means the free instance is throttling us and is worth one short-delay
-// retry (its rate limits typically refill within a couple seconds). 502/503/504
-// mean the query itself is slow or the server is overloaded — retrying the
-// same endpoint right away rarely helps and just adds latency, so those fall
-// straight through to the next mirror instead.
-const RETRY_STATUS = 429;
-const MAX_ATTEMPTS_PER_ENDPOINT = 2;
-
-// If every endpoint in the list failed, that's often a transient spike
-// (a burst of load across the whole shared community infrastructure) rather
-// than a sustained outage -- the error message itself already tells users
-// "try again in a few seconds", so one bounded automatic full-round retry
-// after a short pause does that for them instead of requiring a manual
-// re-click for what's usually a short-lived blip.
-const MAX_ROUNDS = 2;
-const ROUND_RETRY_DELAY_MS = 3000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function retryDelayMs(res: Response): number {
-  const retryAfter = Number(res.headers.get("Retry-After"));
-  if (Number.isFinite(retryAfter) && retryAfter > 0) {
-    return Math.min(retryAfter * 1000, 5000);
-  }
-  return 2000;
-}
+// A previous version retried 429s on the same endpoint (with a sleep) and,
+// if every mirror still failed, waited and retried the whole list again --
+// meant to ride out brief load spikes, but a report of route planning
+// taking 3+ minutes traced straight back to this: with a 30s per-request
+// timeout, 3 endpoints, up to 2 attempts each, and a second full round, a
+// genuinely slow moment (requests hanging near the timeout rather than
+// failing fast) could add up to several minutes before ever reaching the
+// rider. Moving to a different, independently-run mirror immediately on any
+// failure is both simpler and faster than waiting out a struggling one --
+// that's what the Kumi Systems mirror above is for. The per-query `[timeout:…]`
+// budgets below were also cut to 15s (from 20-30s) so Overpass itself gives
+// up and returns a fast, clean error instead of us waiting the old, longer
+// budgets out; this client-side abort is set a few seconds above that as a
+// safety net for a hung connection that never even reaches Overpass's own
+// timeout, not as the primary cutoff.
+const REQUEST_TIMEOUT_MS = 18000;
 
 /** Overpass error pages are full HTML documents; showing that raw is just noise for users. */
 function summarizeErrorBody(status: number, statusText: string, body: string, locale: AppLocale): string {
@@ -92,70 +80,41 @@ function summarizeErrorBody(status: number, statusText: string, body: string, lo
   return `HTTP ${status} ${statusText}${reasons[status] ? ` (${reasons[status]})` : ""}`;
 }
 
-type OverpassRoundResult =
-  | { ok: true; data: OverpassResponse }
-  | { ok: false; attempts: string[]; sawOverloadSignal: boolean };
-
-/** One pass over every mirror in OVERPASS_ENDPOINTS; returns the first success or every failure seen. */
-async function attemptAllEndpoints(query: string, locale: AppLocale): Promise<OverpassRoundResult> {
+/**
+ * Tries each mirror once, in order, moving on immediately on any failure
+ * (rate limit, overload, timeout, network error alike) -- worst case is
+ * bounded at roughly 3 * REQUEST_TIMEOUT_MS instead of the open-ended
+ * multi-round/multi-attempt retries this used to do. A fast, clear failure
+ * is better for the rider than a slow one, even if it's occasionally less
+ * likely to ride out a load spike.
+ */
+async function runOverpassQuery(query: string, locale: AppLocale = routing.defaultLocale): Promise<OverpassResponse> {
   const attempts: string[] = [];
   let sawOverloadSignal = false;
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_ENDPOINT; attempt++) {
-      try {
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: OVERPASS_HEADERS,
-          body: "data=" + encodeURIComponent(query),
-          signal: AbortSignal.timeout(30000),
-        });
-        if (!res.ok) {
-          sawOverloadSignal = true;
-          const bodyText = await res.text().catch(() => "");
-          attempts.push(`${endpoint} -> ${summarizeErrorBody(res.status, res.statusText, bodyText, locale)}`);
-
-          if (res.status === RETRY_STATUS && attempt < MAX_ATTEMPTS_PER_ENDPOINT) {
-            await sleep(retryDelayMs(res));
-            continue;
-          }
-          break;
-        }
-        return { ok: true, data: await res.json() };
-      } catch (err) {
-        attempts.push(
-          `${endpoint} -> ${err instanceof Error ? err.message : String(err)}`
-        );
-        break;
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: OVERPASS_HEADERS,
+        body: "data=" + encodeURIComponent(query),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        sawOverloadSignal = true;
+        const bodyText = await res.text().catch(() => "");
+        attempts.push(`${endpoint} -> ${summarizeErrorBody(res.status, res.statusText, bodyText, locale)}`);
+        continue;
       }
+      return await res.json();
+    } catch (err) {
+      attempts.push(`${endpoint} -> ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  return { ok: false, attempts, sawOverloadSignal };
-}
-
-/**
- * Every mirror failing on the first pass is often a transient load spike
- * across the whole shared infrastructure rather than a sustained outage
- * (see the "try again in a few seconds" hint below) -- so this waits a
- * short beat and gives the full endpoint list one more bounded try before
- * actually failing, instead of making the rider click "Route planen" again
- * themselves for what's usually a short-lived blip.
- */
-async function runOverpassQuery(query: string, locale: AppLocale = routing.defaultLocale): Promise<OverpassResponse> {
-  let lastFailure: { attempts: string[]; sawOverloadSignal: boolean } | null = null;
-
-  for (let round = 1; round <= MAX_ROUNDS; round++) {
-    if (round > 1) await sleep(ROUND_RETRY_DELAY_MS);
-
-    const result = await attemptAllEndpoints(query, locale);
-    if (result.ok) return result.data;
-    lastFailure = result;
-  }
-
   const strings = OVERPASS_STRINGS[locale];
-  const hint = lastFailure?.sawOverloadSignal ? strings.overloadHint : "";
-  throw new Error(`${strings.allServersFailed}\n${lastFailure?.attempts.join("\n") ?? ""}${hint}`);
+  const hint = sawOverloadSignal ? strings.overloadHint : "";
+  throw new Error(`${strings.allServersFailed}\n${attempts.join("\n")}${hint}`);
 }
 
 /** Fetches Dutch cycle node-network points (rcn_ref) within radiusM of center. */
@@ -164,7 +123,7 @@ export async function fetchKnooppunten(
   radiusM: number,
   locale: AppLocale = routing.defaultLocale
 ): Promise<Knooppunt[]> {
-  const query = `[out:json][timeout:25];
+  const query = `[out:json][timeout:15];
 node["rcn_ref"](around:${radiusM},${center.lat},${center.lon});
 out body;`;
 
@@ -206,7 +165,7 @@ export async function fetchPOIsNearRoute(
     .map((f) => `  ${f}(around:${corridorM},${aroundArg});`)
     .join("\n");
 
-  const query = `[out:json][timeout:25];
+  const query = `[out:json][timeout:15];
 (
 ${clauses}
 );
@@ -273,7 +232,7 @@ export async function fetchAreaFeatures(
     .flatMap((cat) => POI_FILTERS[cat])
     .map((f) => `  ${f}(${around});`)
     .join("\n");
-  const query = `[out:json][timeout:25];
+  const query = `[out:json][timeout:15];
 (
   node["highway"~"^(traffic_signals|crossing)$"](${around});
   node["natural"="water"](${around});
@@ -362,7 +321,7 @@ export async function fetchTourismHistoricPoints(
     ];
   });
 
-  const query = `[out:json][timeout:30];
+  const query = `[out:json][timeout:15];
 (
 ${clauses.map((c) => "  " + c).join("\n")}
 );
@@ -387,7 +346,7 @@ export async function fetchTowns(
   radiusM: number,
   locale: AppLocale = routing.defaultLocale
 ): Promise<TownCandidate[]> {
-  const query = `[out:json][timeout:25];
+  const query = `[out:json][timeout:15];
 node["place"~"^(city|town|village)$"](around:${radiusM},${center.lat},${center.lon});
 out center;`;
 
@@ -464,7 +423,7 @@ export async function fetchRoadTypeBreakdown(
   const sampled = sampleIndices.map((i) => route[i]);
   const aroundArg = sampled.map((p) => `${p.lat},${p.lon}`).join(",");
 
-  const query = `[out:json][timeout:25];
+  const query = `[out:json][timeout:15];
 way["highway"](around:${ROAD_TYPE_CORRIDOR_M},${aroundArg});
 out geom;`;
 
@@ -579,7 +538,7 @@ export async function legCrossesExcludedRoad(
   const aroundArg = sampled.map((p) => `${p.lat},${p.lon}`).join(",");
 
   const highwayPattern = `^(${EXCLUDED_HIGHWAY_CLASSES.join("|")})$`;
-  const query = `[out:json][timeout:20];
+  const query = `[out:json][timeout:15];
 way["highway"~"${highwayPattern}"](around:${EXCLUDED_ROAD_CORRIDOR_M},${aroundArg});
 out ids 1;`;
 

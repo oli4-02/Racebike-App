@@ -364,15 +364,39 @@ export function durationFromSpeed(
   return ((totalDistanceM / 1000) / avgSpeedKmh) * 3600;
 }
 
-const TOLERANCE = 0.2; // accept +/-20% of target distance
-const MAX_REFINE_ITERATIONS = 3;
+const TOLERANCE = 0.08; // accept +/-8% of target distance -- tightened from +/-20% after a report of routes landing 50-90% over the requested distance
+const MAX_REFINE_ITERATIONS = 5;
+// Correcting the full measured overshoot/undershoot in one shot tends to
+// overcorrect (drop too many nodes, then need to add most of them back next
+// iteration) -- damping each pass to 70% of the measured gap still lands far
+// more nodes per reroute than the old one-node-per-iteration approach (which
+// is how a route 88% over target could still exhaust all 3 iterations
+// without ever getting close), while converging smoothly instead of
+// oscillating around the target.
+const REFINE_DAMPING = 0.7;
+
+function indicesOfLargestDetours(legs: OsrmLeg[], count: number): number[] {
+  // The node between legs[i] and legs[i+1] is "responsible" for that pair's
+  // combined length; the `count` interior nodes with the largest pairs are
+  // the best candidates to drop in one batch.
+  const pairs: { index: number; length: number }[] = [];
+  for (let i = 0; i < legs.length - 1; i++) {
+    pairs.push({ index: i, length: legs[i].distanceM + legs[i + 1].distanceM });
+  }
+  pairs.sort((a, b) => b.length - a.length);
+  return pairs.slice(0, count).map((p) => p.index);
+}
 
 /**
  * Turns a chosen node sequence into an actual routed PlannedRoute: routes it
  * via OSRM, then iteratively drops/adds nodes to close in on the target
  * distance. Shared by planRoute (single route) and planRoundTripAlternatives
  * (several directional variants off the same node pool), so both stay in
- * sync with the same refine-loop behavior.
+ * sync with the same refine-loop behavior. Throws if the tolerance still
+ * isn't met once iterations run out, rather than silently returning a route
+ * that quietly breaks the distance promise -- callers that offer several
+ * candidates (planRoundTripAlternatives) should treat that as "this
+ * particular variant didn't work out", not surface it to the rider.
  */
 async function finalizeRoute(
   req: Pick<
@@ -395,69 +419,84 @@ async function finalizeRoute(
   let { osrmLegs, totalDistanceM, totalDurationS } = await reroute(sequence, locale);
 
   const minNodes = req.mode === "roundtrip" ? 2 : 0;
+  const hasDirection = req.mode === "roundtrip" && req.direction !== null && req.direction !== undefined;
+
+  // Recomputed fresh for each node added within a batch (not just once per
+  // iteration) so a multi-node "too short" correction still hops from
+  // wherever the previous pick in the same batch landed -- for one-way,
+  // that's the whole point of building the chain hop by hop instead of
+  // always measuring from the fixed start.
+  function pickNextExtraNode(currentNodes: Knooppunt[]): Knooppunt | null {
+    const refineIdealDistance =
+      req.mode === "roundtrip"
+        ? roundTripIdealRadius(targetDistanceM, hasDirection)
+        : targetDistanceM / (currentNodes.length + 2);
+    const referencePoint =
+      req.mode === "oneway" && currentNodes.length > 0 ? currentNodes[currentNodes.length - 1] : req.start;
+    const boundsFilter =
+      req.mode === "oneway"
+        ? (n: ScoredNode) =>
+            isForwardProgress(
+              n,
+              referencePoint,
+              req.destination!,
+              refineIdealDistance * ONE_WAY_BACKWARD_TOLERANCE_FRACTION
+            ) &&
+            Math.abs(angleDiff(bearing(referencePoint, req.destination!), n.bearingFromStart)) <=
+              ONE_WAY_CONE_HALF_WIDTH
+        : hasDirection
+          ? (n: ScoredNode) =>
+              Math.abs(angleDiff(req.direction!, n.bearingFromStart)) <= DIRECTIONAL_CONE_HALF_WIDTH
+          : undefined;
+
+    return pickExtraNode(
+      referencePoint,
+      pool,
+      currentNodes,
+      refineIdealDistance,
+      priorities,
+      featureScores,
+      boundsFilter
+    );
+  }
 
   for (let iter = 0; iter < MAX_REFINE_ITERATIONS; iter++) {
     const ratio = totalDistanceM / targetDistanceM;
     if (ratio >= 1 - TOLERANCE && ratio <= 1 + TOLERANCE) break;
 
     if (ratio > 1 + TOLERANCE && nodes.length > minNodes) {
-      // Too long: drop the node whose surrounding legs add the most distance.
-      const dropIndex = indexOfLargestDetour(osrmLegs);
-      nodes = nodes.filter((_, i) => i !== dropIndex);
+      // Too long: drop however many of the worst-detour nodes the measured
+      // overshoot suggests (damped), all in one batch instead of one
+      // node/reroute at a time.
+      const maxDroppable = nodes.length - minNodes;
+      const dropCount = clampNum(Math.round((ratio - 1) * REFINE_DAMPING * nodes.length), 1, maxDroppable);
+      const dropIndices = new Set(indicesOfLargestDetours(osrmLegs, dropCount));
+      nodes = nodes.filter((_, i) => !dropIndices.has(i));
     } else if (ratio < 1 - TOLERANCE) {
-      // Too short: add the best-scoring unused candidate that extends the
-      // route. For one-way, the reference point is the last node reached so
-      // far (not the fixed start) and the candidate must still make forward
-      // progress towards the destination -- same reasoning as
-      // selectOneWayNodes, otherwise this refinement step could reintroduce
-      // the exact backtracking it's meant to fix. For a direction-biased
-      // roundtrip, the same cone/out-and-back radius used by the initial
-      // selection applies here too -- otherwise a route that came up short
-      // gets "topped up" with a node picked with no direction preference at
-      // all, quietly pulling a direction-biased route back into hugging the
-      // start (the bug behind roundtrips still circling the start town even
-      // with a direction chosen).
-      const hasDirection = req.mode === "roundtrip" && req.direction !== null && req.direction !== undefined;
-      const refineIdealDistance =
-        req.mode === "roundtrip"
-          ? roundTripIdealRadius(targetDistanceM, hasDirection)
-          : targetDistanceM / (nodes.length + 2);
-      const referencePoint =
-        req.mode === "oneway" && nodes.length > 0 ? nodes[nodes.length - 1] : req.start;
-      const boundsFilter =
-        req.mode === "oneway"
-          ? (n: ScoredNode) =>
-              isForwardProgress(
-                n,
-                referencePoint,
-                req.destination!,
-                refineIdealDistance * ONE_WAY_BACKWARD_TOLERANCE_FRACTION
-              ) &&
-              Math.abs(
-                angleDiff(bearing(referencePoint, req.destination!), n.bearingFromStart)
-              ) <= ONE_WAY_CONE_HALF_WIDTH
-          : hasDirection
-            ? (n: ScoredNode) =>
-                Math.abs(angleDiff(req.direction!, n.bearingFromStart)) <= DIRECTIONAL_CONE_HALF_WIDTH
-            : undefined;
-
-      const extra = pickExtraNode(
-        referencePoint,
-        pool,
-        nodes,
-        refineIdealDistance,
-        priorities,
-        featureScores,
-        boundsFilter
-      );
-      if (!extra) break;
-      nodes = [...nodes, extra];
+      // Too short: add however many best-scoring unused candidates the
+      // measured undershoot suggests (damped), one pick at a time so each
+      // subsequent pick still respects the growing node list, but without a
+      // reroute in between.
+      const addCount = clampNum(Math.round((1 - ratio) * REFINE_DAMPING * Math.max(nodes.length, 1)), 1, 4);
+      let addedAny = false;
+      for (let i = 0; i < addCount; i++) {
+        const extra = pickNextExtraNode(nodes);
+        if (!extra) break;
+        nodes = [...nodes, extra];
+        addedAny = true;
+      }
+      if (!addedAny) break;
     } else {
       break;
     }
 
     sequence = buildSequence(nodes);
     ({ osrmLegs, totalDistanceM, totalDurationS } = await reroute(sequence, locale));
+  }
+
+  const finalRatio = totalDistanceM / targetDistanceM;
+  if (finalRatio < 1 - TOLERANCE || finalRatio > 1 + TOLERANCE) {
+    throw new Error(ROUTE_PLANNER_STRINGS[locale].distanceToleranceFailed);
   }
 
   if (req.avoidMainRoads) {
@@ -767,42 +806,35 @@ export async function planRoundTripAlternatives(
   const results = await mapWithConcurrency(directions, ALTERNATIVE_CONCURRENCY, async (direction) => {
     const nodes = selectRoundTripNodes(req.start, pool, targetDistanceM, priorities, featureScores, direction);
     if (nodes.length < 2) return null;
-    const route = await finalizeRoute(
-      {
-        mode: "roundtrip",
-        start: req.start,
-        direction,
-        avgSpeedKmh: req.avgSpeedKmh,
-        avoidMainRoads: req.avoidMainRoads,
-      },
-      nodes,
-      targetDistanceM,
-      pool,
-      priorities,
-      featureScores,
-      locale
-    );
-    return { direction, route, highlight: pickHighlight(nodes, featureScores) };
+    try {
+      const route = await finalizeRoute(
+        {
+          mode: "roundtrip",
+          start: req.start,
+          direction,
+          avgSpeedKmh: req.avgSpeedKmh,
+          avoidMainRoads: req.avoidMainRoads,
+        },
+        nodes,
+        targetDistanceM,
+        pool,
+        priorities,
+        featureScores,
+        locale
+      );
+      return { direction, route, highlight: pickHighlight(nodes, featureScores) };
+    } catch {
+      // finalizeRoute couldn't land this direction within the distance
+      // tolerance -- skip it rather than surface a route that quietly
+      // breaks the distance promise; the other directions/candidates are
+      // still tried independently.
+      return null;
+    }
   });
 
   return results.filter(
     (r): r is { direction: number | null; route: PlannedRoute; highlight: AlternativeHighlight } => r !== null
   );
-}
-
-function indexOfLargestDetour(legs: OsrmLeg[]): number {
-  // The node between legs[i] and legs[i+1] is "responsible" for that pair's
-  // combined length; pick the interior node whose pair is largest.
-  let worstIndex = 0;
-  let worstLength = -Infinity;
-  for (let i = 0; i < legs.length - 1; i++) {
-    const pairLength = legs[i].distanceM + legs[i + 1].distanceM;
-    if (pairLength > worstLength) {
-      worstLength = pairLength;
-      worstIndex = i;
-    }
-  }
-  return worstIndex;
 }
 
 function pickExtraNode(
