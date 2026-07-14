@@ -3,9 +3,16 @@ import { distance } from "./geo";
 import { OVERPASS_STRINGS, POI_CATEGORY_LABELS } from "./i18nStrings";
 import type { Knooppunt, LatLon, POI, POICategory, RoadTypeBreakdown, RoadTypeResult, RoadTypeSegment } from "./types";
 
+// overpass-api.de and its lz4 load-balanced frontend are the same operator's
+// infrastructure -- under real load they can both be rate-limited/overloaded
+// at once (a 429 on one right after a 504 on the other, rather than genuine
+// independent capacity). Kumi Systems runs a separately operated public
+// mirror, so it's the one endpoint here actually likely to still be up when
+// the other two aren't.
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://lz4.overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
 ];
 
 // Overpass's usage policy requires a descriptive User-Agent; requests
@@ -52,6 +59,15 @@ function elementPoint(el: OverpassElement): LatLon | null {
 const RETRY_STATUS = 429;
 const MAX_ATTEMPTS_PER_ENDPOINT = 2;
 
+// If every endpoint in the list failed, that's often a transient spike
+// (a burst of load across the whole shared community infrastructure) rather
+// than a sustained outage -- the error message itself already tells users
+// "try again in a few seconds", so one bounded automatic full-round retry
+// after a short pause does that for them instead of requiring a manual
+// re-click for what's usually a short-lived blip.
+const MAX_ROUNDS = 2;
+const ROUND_RETRY_DELAY_MS = 3000;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -76,7 +92,12 @@ function summarizeErrorBody(status: number, statusText: string, body: string, lo
   return `HTTP ${status} ${statusText}${reasons[status] ? ` (${reasons[status]})` : ""}`;
 }
 
-async function runOverpassQuery(query: string, locale: AppLocale = routing.defaultLocale): Promise<OverpassResponse> {
+type OverpassRoundResult =
+  | { ok: true; data: OverpassResponse }
+  | { ok: false; attempts: string[]; sawOverloadSignal: boolean };
+
+/** One pass over every mirror in OVERPASS_ENDPOINTS; returns the first success or every failure seen. */
+async function attemptAllEndpoints(query: string, locale: AppLocale): Promise<OverpassRoundResult> {
   const attempts: string[] = [];
   let sawOverloadSignal = false;
 
@@ -100,7 +121,7 @@ async function runOverpassQuery(query: string, locale: AppLocale = routing.defau
           }
           break;
         }
-        return await res.json();
+        return { ok: true, data: await res.json() };
       } catch (err) {
         attempts.push(
           `${endpoint} -> ${err instanceof Error ? err.message : String(err)}`
@@ -110,9 +131,31 @@ async function runOverpassQuery(query: string, locale: AppLocale = routing.defau
     }
   }
 
+  return { ok: false, attempts, sawOverloadSignal };
+}
+
+/**
+ * Every mirror failing on the first pass is often a transient load spike
+ * across the whole shared infrastructure rather than a sustained outage
+ * (see the "try again in a few seconds" hint below) -- so this waits a
+ * short beat and gives the full endpoint list one more bounded try before
+ * actually failing, instead of making the rider click "Route planen" again
+ * themselves for what's usually a short-lived blip.
+ */
+async function runOverpassQuery(query: string, locale: AppLocale = routing.defaultLocale): Promise<OverpassResponse> {
+  let lastFailure: { attempts: string[]; sawOverloadSignal: boolean } | null = null;
+
+  for (let round = 1; round <= MAX_ROUNDS; round++) {
+    if (round > 1) await sleep(ROUND_RETRY_DELAY_MS);
+
+    const result = await attemptAllEndpoints(query, locale);
+    if (result.ok) return result.data;
+    lastFailure = result;
+  }
+
   const strings = OVERPASS_STRINGS[locale];
-  const hint = sawOverloadSignal ? strings.overloadHint : "";
-  throw new Error(`${strings.allServersFailed}\n${attempts.join("\n")}${hint}`);
+  const hint = lastFailure?.sawOverloadSignal ? strings.overloadHint : "";
+  throw new Error(`${strings.allServersFailed}\n${lastFailure?.attempts.join("\n") ?? ""}${hint}`);
 }
 
 /** Fetches Dutch cycle node-network points (rcn_ref) within radiusM of center. */

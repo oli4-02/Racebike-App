@@ -889,13 +889,13 @@ Overpass, OSRM und Open-Meteo benötigen keine Keys.
 
 ### Umgang mit Overpass-Überlastung (429/502/503/504)
 
-Der öffentliche Overpass-Dienst (overpass-api.de, lz4.overpass-api.de) ist
-ein geteilter Community-Server ohne SLA und reagiert bei hoher Last mit
-429 (Rate-Limit) oder 502/503/504 (überlastet/Gateway-Timeout). `runOverpassQuery`
-in `src/lib/overpass.ts` geht damit so um:
+Der öffentliche Overpass-Dienst ist ein geteilter Community-Server ohne SLA
+und reagiert bei hoher Last mit 429 (Rate-Limit) oder 502/503/504
+(überlastet/Gateway-Timeout). `runOverpassQuery` in `src/lib/overpass.ts`
+geht damit so um:
 
 - Bei 429 wird einmal mit kurzer Wartezeit (Retry-After-Header oder 2s
-  Standard) auf demselben Server erneut versucht, bevor zum zweiten Mirror
+  Standard) auf demselben Server erneut versucht, bevor zum nächsten Mirror
   gewechselt wird — Rate-Limits erholen sich meist innerhalb weniger Sekunden.
 - Bei 502/503/504 wird sofort zum nächsten Mirror gewechselt statt erneut zu
   versuchen, da eine überlastete/zu komplexe Anfrage durch sofortiges
@@ -909,9 +909,30 @@ in `src/lib/overpass.ts` geht damit so um:
   Anfragen zusammen (`fetchAreaFeatures(..., includeAttractions=true)`), um
   die Serverlast pro Routenplanung zu reduzieren.
 
+**Nach einem Nutzer-Report (alle 3 Anfragen — 504, 429, dann ein
+Fetch-Fehler — schlugen an einem Abend fehl) zwei weitere Verbesserungen:**
+
+- Ein dritter Mirror (`overpass.kumi.systems`) ist jetzt in
+  `OVERPASS_ENDPOINTS` gelistet. Wichtiger als "noch ein Server" ist dabei,
+  *wessen* Server: `overpass-api.de` und sein Lastverteilungs-Frontend
+  `lz4.overpass-api.de` laufen beim selben Betreiber — unter echter Last
+  können beide gleichzeitig überlastet/rate-limitiert sein (genau das aus
+  dem Report: 504 auf dem einen, 429 direkt danach auf dem "anderen"), weil
+  sie sich vermutlich dieselbe Backend-Kapazität teilen. Kumi Systems
+  betreibt eine eigenständige, unabhängige öffentliche Instanz — der
+  einzige der drei Mirrors, der bei einer Lastspitze der `overpass-api.de`-
+  Infrastruktur tatsächlich unabhängig davon noch verfügbar sein kann.
+- Schlägt die komplette Mirror-Liste einmal komplett fehl, wartet
+  `runOverpassQuery` jetzt kurz (3s) und probiert die ganze Liste ein
+  zweites Mal (`MAX_ROUNDS = 2`), bevor der Fehler tatsächlich an den Nutzer
+  geht. Die Fehlermeldung selbst rät ja schon "in ein paar Sekunden erneut
+  versuchen" — dieser zweite Durchlauf macht genau das automatisch, statt
+  den Nutzer bei einer meist kurzlebigen Lastspitze zu einem manuellen
+  Neuversuch zu zwingen.
+
 Das sind Abmilderungen, keine Garantie — bei anhaltender Überlastung des
-öffentlichen Dienstes hilft nur Warten oder ein eigener (selbst gehosteter
-oder kommerzieller) Overpass-Endpunkt.
+öffentlichen Dienstes (nicht nur einer kurzen Spitze) hilft nur Warten oder
+ein eigener (selbst gehosteter oder kommerzieller) Overpass-Endpunkt.
 
 ### Performance: ein OSRM-Request statt vieler pro Route
 
