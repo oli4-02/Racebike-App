@@ -87,7 +87,7 @@ export default async function LandingPage({
               </div>
             </div>
             <PlaceholderPhoto
-              src="/images/hero-groningen-cyclists.jpg"
+              src="/images/hero-roadbikes-sunset.jpg"
               alt={tHero("photoAlt")}
               className="meewind-clip h-64 w-full md:h-96"
             />
