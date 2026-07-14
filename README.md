@@ -485,13 +485,55 @@ spürbar in eine Richtung hinaus und schleift sich am Ende wieder zurück,
 statt eng um den Start zu kreisen.
 
 `planRoundTripAlternatives()` nutzt denselben Knotenpunkt-Pool/Feature-Fetch
-(ein Overpass-Roundtrip statt fünf) und berechnet parallel (mit begrenzter
-Nebenläufigkeit, um den öffentlichen OSRM-Dienst nicht zu überlasten) fünf
-Varianten: ohne gewählte Richtung fünf gleichmäßig über den Kompass verteilte
-Richtungen, mit gewählter Richtung fünf leicht gestreute Varianten um sie
-herum (±30°). `/api/plan-alternatives` liefert sie mit Distanz/Zeit und
-Kartenvorschau an `RouteAlternativesPicker` im Frontend, wo eine davon direkt
-übernommen werden kann.
+(ein Overpass-Roundtrip statt fünf) und berechnet parallel (Nebenläufigkeit 5
+— passend zur festen Variantenzahl, da der teure Pool/Feature-Fetch ja schon
+geteilt ist, siehe "Performance" unten) fünf Varianten: ohne gewählte
+Richtung fünf gleichmäßig über den Kompass verteilte Richtungen, mit
+gewählter Richtung fünf leicht gestreute Varianten um sie herum (±30°).
+`/api/plan-alternatives` liefert sie mit Distanz/Zeit und Kartenvorschau an
+`RoundTripAlternatives` im Frontend, wo eine davon direkt übernommen werden
+kann.
+
+**Auslöser jetzt der Haupt-"Route planen"-Button, nicht mehr ein
+separater Button.** Ursprünglich stand neben der Standard-Formularstrecke
+noch ein eigener "5 Routen-Varianten anzeigen"-Button, den man zusätzlich
+zum Absenden anklicken konnte — zwei Wege zu einer Route nebeneinander, noch
+bevor überhaupt gerechnet wurde, was unnötig verwirrend war. Für den
+Rundtour-Modus löst der Haupt-Submit (`handleSubmit` in `page.tsx`) jetzt
+direkt `planRouteAlternatives()` statt einer Einzelroute aus; die 5 Karten
+erscheinen im Ergebnisbereich, sobald berechnet, und erst eine Auswahl davon
+(`handleSelectAlternative`) setzt die eigentlich angezeigte `route`. One-Way
+und Signature-Route sind davon unberührt (dort ergibt eine feste Zieladresse
+bzw. eine gewählte Tour ohnehin nur eine sinnvolle Route, keine Varianten).
+
+### Rückenwind-Timing: Hin- oder Rückweg bevorzugen
+
+Die automatische Windauswertung (`evaluateWindDirection()` in `wind.ts`) gab
+es schon vorher — sie vergleicht die geplante Knotenpunkt-Sequenz gegen ihre
+Umkehrung und fährt die Variante, die im gewichteten Mittel mehr Rückenwind
+auf der stärker gewichteten Streckenhälfte bringt. Diese Gewichtung war
+bisher fix auf "spätere Beinabschnitte zählen mehr" verdrahtet (Rückenwind
+auf dem anstrengenderen Rückweg), ohne Möglichkeit, das umzudrehen. Ein
+neuer Schalter im "Anpassen"-Bereich ("Rückenwind lieber: Auf dem Rückweg /
+Auf dem Hinweg") reicht jetzt als `tailwindTiming` durch bis zu
+`weightedTailwindScore()`, die bei `"outbound"` die Gewichtung einfach
+spiegelt (frühe statt späte Beinabschnitte zählen mehr) — dieselbe Formel,
+nur mit umgekehrter Bevorzugung. Die Begründungstexte
+(`WIND_EXPLANATION`/`WIND_PART_LABEL` in `i18nStrings.ts`) benennen dabei
+generisch "die erste (Hin-)" bzw. "die zweite (anstrengendere)"
+Streckenhälfte statt fest "der zweite Streckenteil" zu sagen.
+
+Bisher lief diese Auswertung nur bei der Einzelroute (`/api/plan`); die 5
+Varianten (`/api/plan-alternatives`) bekamen zwar dieselbe geteilte
+Windvorhersage für die Kompass-Anzeige, aber keine eigene
+Vorwärts-/Rückwärts-Optimierung — seit die 5 Varianten der Standard-Flow für
+Rundtouren sind (siehe oben), wäre das eine Lücke im Kernversprechen "immer
+windoptimiert" gewesen. Die Vorwärts-/Rückwärts-Logik inklusive der
+optionalen Nachrouting via OSRM ist deshalb aus `/api/plan/route.ts` in
+`routePlanner.ts`s `applyWindEvaluation()` ausgelagert und wird jetzt in
+beiden Endpunkten aufgerufen — bei den 5 Varianten für jede einzeln
+(`Promise.all`, da nur die Varianten betroffen sind, bei denen Umkehren
+tatsächlich besser abschneidet, meist deutlich weniger als 5).
 
 Diese Richtungs-Logik galt anfangs nur für die initiale Knotenpunkt-Auswahl:
 die "Refine"-Schleife in `finalizeRoute()`, die eine zu kurz/lang geratene
@@ -578,8 +620,11 @@ keine POI-Auswahl im Formular anzeigt.
   die Lade-Anzeige: `page.tsx` zeigt die Route sofort an und lädt die
   POI-Marker nebenbei nach (`void loadPois(...)` statt `await`), für alle
   Tourtypen (Rundtour, One-Way, Varianten, Landschafts-/Signature-Route).
-- `planRoundTripAlternatives()` berechnet die 5 Varianten jetzt mit
-  Nebenläufigkeit 3 statt 2 (`ALTERNATIVE_CONCURRENCY`).
+- `planRoundTripAlternatives()` berechnet die 5 Varianten mit Nebenläufigkeit
+  5 statt 3 (`ALTERNATIVE_CONCURRENCY`) — bei fest 5 Varianten und einem
+  ohnehin schon geteilten Pool/Feature-Fetch gibt es keinen Grund, das
+  restliche OSRM-lastige Pro-Varianten-Routing noch in zwei Wellen statt
+  einer laufen zu lassen.
 - Adresssuche (`AddressSearch.tsx`): das Auswählen eines Suchergebnisses hat
   bisher `setQuery(displayName)` ausgelöst, was denselben Debounce-Suche-Effekt
   erneut angestoßen und das Dropdown Sekundenbruchteile später mit denselben
@@ -588,6 +633,30 @@ keine POI-Auswahl im Formular anzeigt.
   Klick hatte den Startpunkt aber schon korrekt gesetzt). Ein Ref-Flag
   überspringt die Suche für genau den einen durch die Auswahl selbst
   ausgelösten Effekt-Durchlauf.
+
+**Ehrliche Einschränkung**: Da der Rundtour-Submit jetzt immer alle 5
+Varianten statt einer Einzelroute berechnet (siehe "Direction-biased
+Rundtouren" oben), macht ein einzelner Klick auf "Route planen" in Summe
+mehr Overpass-/OSRM-Arbeit als vorher, auch wenn die Nebenläufigkeit erhöht
+wurde. Ohne Zugriff auf die echten externen Dienste in dieser Sandbox
+(ausgehende Verbindungen zu Overpass/OSRM/Open-Meteo sind hier blockiert)
+lässt sich die tatsächliche Wartezeit nicht live messen oder benchmarken —
+die Nebenläufigkeits-Erhöhung ist eine begründete, aber unverifizierte
+Optimierung. Was stattdessen zuverlässig hilft, ist eine ehrliche
+Fortschrittsanzeige statt eines starren Lade-Texts:
+
+### Gefühlter Fortschritt: `PlanningProgress` statt starrer Lade-Text
+
+Weder Overpass noch OSRM noch Open-Meteo liefern einen echten
+Fortschritts-Stream (klassisches Request/Response, keine Teil-Updates) —
+`PlanningProgress.tsx` täuscht Fortschritt deshalb bewusst vor, statt den
+Nutzer auf ein statisches "Route wird geplant…" starren zu lassen: ein
+schmaler Balken kriecht über gestufte Intervalle (1,8 s) auf 92 % zu (nie
+volle 100 %, solange die Anfrage noch läuft), begleitet von rotierendem
+Status-Text, der grob den tatsächlichen Server-Schritten entspricht (Suche
+Knotenpunkte → Windvorhersage → Routenberechnung → "Fast fertig…").
+Erscheint im Footer direkt unter dem "Route planen"-Button, solange
+`loading` in `page.tsx` `true` ist, für alle Tourtypen gleichermaßen.
 
 ### Straßentyp-Transparenz (Radweg / Wohnstraße / Hauptstraße)
 

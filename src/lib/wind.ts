@@ -1,7 +1,7 @@
 import { routing, type AppLocale } from "@/i18n/routing";
 import { angleDiff, bearing, toRad } from "./geo";
-import { COMPASS_LABELS, WIND_EXPLANATION } from "./i18nStrings";
-import type { LatLon, WindEvaluation, WindForecast } from "./types";
+import { COMPASS_LABELS, WIND_EXPLANATION, WIND_PART_LABEL } from "./i18nStrings";
+import type { LatLon, TailwindTiming, WindEvaluation, WindForecast } from "./types";
 
 const OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast";
 
@@ -83,26 +83,29 @@ export function tailwindColor(component: number): string {
 
 /**
  * Compares riding a leg sequence forward vs. reversed and picks whichever
- * direction gives more tailwind on the second half of the ride (the part
- * where fatigue makes headwind hurt most). `tailwindPriority` (0..1, from
- * the user's priority slider) controls how strongly the later section is
- * weighted: 0 evaluates the whole loop roughly evenly, 1 aggressively
- * favours a tailwind finish.
+ * direction gives more tailwind on the favored half of the ride --
+ * "return" (default: the harder, later half, where fatigue makes headwind
+ * hurt most) or "outbound" if the rider would rather get tailwind on the
+ * way out instead. `tailwindPriority` (0..1, from the user's priority
+ * slider) controls how strongly the favored section is weighted: 0
+ * evaluates the whole loop roughly evenly, 1 aggressively favours a
+ * tailwind finish (or start, for "outbound").
  */
 export function evaluateWindDirection(
   legs: WindLeg[],
   windDirectionDeg: number,
   windSpeedKmh: number,
   tailwindPriority = 1,
-  locale: AppLocale = routing.defaultLocale
+  locale: AppLocale = routing.defaultLocale,
+  preferTailwindOn: TailwindTiming = "return"
 ): WindEvaluation {
-  const forwardScore = weightedTailwindScore(legs, windDirectionDeg, tailwindPriority);
+  const forwardScore = weightedTailwindScore(legs, windDirectionDeg, tailwindPriority, preferTailwindOn);
   const reversed = [...legs].reverse().map((leg) => ({
     from: leg.to,
     to: leg.from,
     distanceM: leg.distanceM,
   }));
-  const reverseScore = weightedTailwindScore(reversed, windDirectionDeg, tailwindPriority);
+  const reverseScore = weightedTailwindScore(reversed, windDirectionDeg, tailwindPriority, preferTailwindOn);
 
   // Riding the reversed sequence costs the caller an extra OSRM round trip,
   // so require reverse to be meaningfully better, not just barely ahead on
@@ -113,10 +116,11 @@ export function evaluateWindDirection(
 
   const compass = compassLabel(windDirectionDeg, locale);
   const speedLabel = windSpeedKmh.toFixed(0);
+  const partLabel = WIND_PART_LABEL[locale][preferTailwindOn];
   const explanation =
     chosenDirection === "forward"
-      ? WIND_EXPLANATION[locale].forward(compass, speedLabel)
-      : WIND_EXPLANATION[locale].reverse(compass, speedLabel);
+      ? WIND_EXPLANATION[locale].forward(compass, speedLabel, partLabel)
+      : WIND_EXPLANATION[locale].reverse(compass, speedLabel, partLabel);
 
   return {
     chosenDirection,
@@ -128,11 +132,12 @@ export function evaluateWindDirection(
   };
 }
 
-/** Weighted average tailwind component (-1..1); intensity controls how much more later legs count. */
+/** Weighted average tailwind component (-1..1); intensity controls how much more the favored half's legs count. */
 function weightedTailwindScore(
   legs: WindLeg[],
   windFromDeg: number,
-  intensity: number
+  intensity: number,
+  preferTailwindOn: TailwindTiming = "return"
 ): number {
   if (legs.length === 0) return 0;
 
@@ -141,8 +146,11 @@ function weightedTailwindScore(
   legs.forEach((leg, i) => {
     const travelBearing = bearing(leg.from, leg.to);
     const component = tailwindComponent(travelBearing, windFromDeg);
-    const positionFactor =
-      1 + (legs.length > 1 ? (i / (legs.length - 1)) * intensity : 0);
+    const progress = legs.length > 1 ? i / (legs.length - 1) : 0;
+    // "return" favors later legs (higher progress) same as before;
+    // "outbound" mirrors that to favor the earlier legs instead.
+    const favoredProgress = preferTailwindOn === "outbound" ? 1 - progress : progress;
+    const positionFactor = 1 + favoredProgress * intensity;
     const weight = leg.distanceM * positionFactor;
     weightedSum += component * weight;
     weightTotal += weight;

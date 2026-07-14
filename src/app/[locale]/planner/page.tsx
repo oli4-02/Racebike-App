@@ -5,11 +5,12 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import PlannerPanel from "@/components/PlannerPanel";
 import CustomizeSection from "@/components/planner/CustomizeSection";
+import PlanningProgress from "@/components/planner/PlanningProgress";
 import ResultStep from "@/components/planner/ResultStep";
 import WhereStep from "@/components/planner/WhereStep";
 import type { OneWaySubMode } from "@/components/OneWayTargetPicker";
 import Collapsible from "@/components/ui/Collapsible";
-import { fetchPois, planRoute } from "@/lib/apiClient";
+import { fetchPois, planRoute, planRouteAlternatives } from "@/lib/apiClient";
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type {
   AppMode,
@@ -19,10 +20,12 @@ import type {
   POICategory,
   Priorities,
   RoadTypeResult,
+  RoundTripAlternative,
   RouteMode,
   ScenicRoutePlan,
   SignatureRoutePlan,
   StopRequest,
+  TailwindTiming,
 } from "@/lib/types";
 import type { PlanPreview } from "@/components/RouteMap";
 
@@ -48,6 +51,7 @@ export default function PlannerPage() {
   const [appMode, setAppMode] = useState<AppMode>("roundtrip");
   const [distanceKm, setDistanceKm] = useState(60);
   const [direction, setDirection] = useState<number | null>(null);
+  const [tailwindTiming, setTailwindTiming] = useState<TailwindTiming>("return");
   const [avgSpeedKmh, setAvgSpeedKmh] = useState(27);
   const [date, setDate] = useState(today());
   const [priorities, setPriorities] = useState<Priorities>(DEFAULT_PRIORITIES);
@@ -66,6 +70,14 @@ export default function PlannerPage() {
   const [signaturePlan, setSignaturePlan] = useState<SignatureRoutePlan | null>(null);
 
   const [route, setRoute] = useState<PlannedRoute | null>(null);
+  // Roundtrip mode surfaces 5 wind-optimized variants for the rider to pick
+  // from instead of committing to a single route straight away -- `route`
+  // above only gets set once one of these is chosen (see
+  // handleSelectAlternative).
+  const [roundTripAlternatives, setRoundTripAlternatives] = useState<RoundTripAlternative[] | null>(
+    null
+  );
+  const [selectedAlternativeIndex, setSelectedAlternativeIndex] = useState<number | null>(null);
   const [pois, setPois] = useState<POI[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,15 +86,18 @@ export default function PlannerPage() {
   const [selectedStopPoiIds, setSelectedStopPoiIds] = useState<Record<string, number>>({});
 
   const [collapsed, setCollapsed] = useState(false);
-  // Everything beyond start + distance (direction, priorities, stops, POI
-  // filters, avoid-main-roads) has a sensible default, so it starts tucked
-  // away here instead of forcing the rider through it before a first route.
+  // Everything beyond start + distance (direction, priorities, stops,
+  // avoid-main-roads, POI filters) already had sensible defaults, so it
+  // starts tucked away here instead of forcing the rider through it before
+  // a first route.
   const [customizeOpen, setCustomizeOpen] = useState(false);
 
   const resultRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (route || error) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [route, error]);
+    if (route || error || roundTripAlternatives) {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [route, error, roundTripAlternatives]);
 
   // The core planner only knows roundtrip/oneway; "signature" is a UI-level
   // mode that always resolves to a roundtrip plan via its own endpoint.
@@ -115,34 +130,65 @@ export default function PlannerPage() {
     }
   }
 
-  async function handleSubmit() {
-    if (!start || !canSubmit) return;
-    setLoading(true);
+  function resetResult() {
     setError(null);
+    setRoute(null);
+    setRoundTripAlternatives(null);
+    setSelectedAlternativeIndex(null);
     setPois([]);
     setRoadTypeSegments([]);
     setSelectedStopPoiIds({});
+  }
+
+  async function handleSubmit() {
+    if (!start || !canSubmit) return;
+    setLoading(true);
+    resetResult();
+    setScenicPlan(null);
+    setSignaturePlan(null);
     try {
-      const planned = await planRoute(
-        {
-          start,
-          mode,
-          distanceKm,
-          date,
-          priorities,
-          destination: mode === "oneway" ? destination! : undefined,
-          direction: mode === "roundtrip" ? direction : undefined,
-          avgSpeedKmh,
-          poiCategories,
-          avoidMainRoads,
-        },
-        locale
-      );
-      setRoute(planned);
-      // POIs are a secondary, non-blocking overlay -- don't make the user
-      // wait through another Overpass round trip before the route itself
-      // (already computed) is shown.
-      void loadPois(planned.geometry);
+      if (mode === "roundtrip") {
+        // Roundtrip always offers a choice instead of committing to one
+        // route straight away -- the rider picks a favorite from the 5
+        // (see handleSelectAlternative), rather than getting a single
+        // result they'd otherwise have to separately ask to compare.
+        const alternatives = await planRouteAlternatives(
+          {
+            start,
+            mode: "roundtrip",
+            distanceKm,
+            date,
+            priorities,
+            direction,
+            tailwindTiming,
+            avgSpeedKmh,
+            poiCategories,
+            avoidMainRoads,
+          },
+          locale
+        );
+        setRoundTripAlternatives(alternatives);
+      } else {
+        const planned = await planRoute(
+          {
+            start,
+            mode,
+            distanceKm,
+            date,
+            priorities,
+            destination: destination!,
+            avgSpeedKmh,
+            poiCategories,
+            avoidMainRoads,
+          },
+          locale
+        );
+        setRoute(planned);
+        // POIs are a secondary, non-blocking overlay -- don't make the user
+        // wait through another Overpass round trip before the route itself
+        // (already computed) is shown.
+        void loadPois(planned.geometry);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : t("home.routeError"));
       setRoute(null);
@@ -151,15 +197,16 @@ export default function PlannerPage() {
     }
   }
 
-  function handleRouteAlternative(planned: PlannedRoute) {
+  function handleSelectAlternative(index: number) {
+    if (!roundTripAlternatives) return;
+    const alt = roundTripAlternatives[index];
+    setSelectedAlternativeIndex(index);
     setError(null);
-    setScenicPlan(null);
-    setSignaturePlan(null);
-    setRoute(planned);
+    setRoute(alt.route);
     setPois([]);
     setRoadTypeSegments([]);
     setSelectedStopPoiIds({});
-    void loadPois(planned.geometry);
+    void loadPois(alt.route.geometry);
   }
 
   function handleScenicRoute(result: ScenicRoutePlan) {
@@ -167,6 +214,8 @@ export default function PlannerPage() {
     setDestination(null);
     setDestinationLabel(null);
     setSignaturePlan(null);
+    setRoundTripAlternatives(null);
+    setSelectedAlternativeIndex(null);
     setScenicPlan(result);
     setRoute(result.route);
     setPois([]);
@@ -180,6 +229,8 @@ export default function PlannerPage() {
     setDestination(null);
     setDestinationLabel(null);
     setScenicPlan(null);
+    setRoundTripAlternatives(null);
+    setSelectedAlternativeIndex(null);
     setSignaturePlan(result);
     setRoute(result.route);
     setPois([]);
@@ -190,7 +241,7 @@ export default function PlannerPage() {
 
   function handleSetAppMode(next: AppMode) {
     setAppMode(next);
-    setRoute(null);
+    resetResult();
     setScenicPlan(null);
     setSignaturePlan(null);
   }
@@ -278,7 +329,8 @@ export default function PlannerPage() {
               >
                 {loading ? t("form.submitLoading") : t("form.submit")}
               </button>
-              {!canSubmit && submitHint && (
+              {loading && <PlanningProgress />}
+              {!loading && !canSubmit && submitHint && (
                 <p className="mt-1 text-xs text-meewind-fg-muted">{submitHint}</p>
               )}
             </>
@@ -291,7 +343,6 @@ export default function PlannerPage() {
             setAppMode={handleSetAppMode}
             distanceKm={distanceKm}
             setDistanceKm={setDistanceKm}
-            direction={direction}
             date={date}
             onSetStart={handleSetStart}
             start={start}
@@ -307,9 +358,6 @@ export default function PlannerPage() {
             oneWaySubMode={oneWaySubMode}
             priorities={priorities}
             avgSpeedKmh={avgSpeedKmh}
-            poiCategories={poiCategories}
-            avoidMainRoads={avoidMainRoads}
-            onRouteAlternative={handleRouteAlternative}
             onSignatureRoute={handleSignatureRoute}
             onDistanceKmChange={setDistanceKm}
           />
@@ -324,6 +372,8 @@ export default function PlannerPage() {
               appMode={appMode}
               direction={direction}
               setDirection={setDirection}
+              tailwindTiming={tailwindTiming}
+              setTailwindTiming={setTailwindTiming}
               date={date}
               setDate={setDate}
               priorities={priorities}
@@ -357,6 +407,9 @@ export default function PlannerPage() {
               onSelectStopPoi={(stopId, poiId) =>
                 setSelectedStopPoiIds((prev) => ({ ...prev, [stopId]: poiId }))
               }
+              alternatives={roundTripAlternatives}
+              selectedAlternativeIndex={selectedAlternativeIndex}
+              onSelectAlternative={handleSelectAlternative}
             />
           </div>
         </div>

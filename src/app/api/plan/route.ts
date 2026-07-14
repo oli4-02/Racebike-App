@@ -1,14 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { NextRequest, NextResponse } from "next/server";
-import { combineGeometry, durationFromSpeed, planRoute, toRouteLegs } from "@/lib/routePlanner";
-import { routeChain } from "@/lib/osrm";
+import { applyWindEvaluation, planRoute } from "@/lib/routePlanner";
 import { resolveLocale } from "@/lib/resolveLocale";
-import {
-  evaluateWindDirection,
-  fetchWindForecast,
-  isWithinForecastRange,
-  representativeDaytimeWind,
-} from "@/lib/wind";
+import { fetchWindForecast, isWithinForecastRange, representativeDaytimeWind } from "@/lib/wind";
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type { PlanRequest } from "@/lib/types";
 
@@ -53,39 +47,15 @@ export async function POST(req: NextRequest) {
       route = { ...route, windInfo: wind };
 
       if (body.mode === "roundtrip") {
-        const windLegs = route.legs.map((l) => ({
-          from: l.from,
-          to: l.to,
-          distanceM: l.distanceM,
-        }));
-        const evaluation = evaluateWindDirection(
-          windLegs,
-          wind.directionDeg,
-          wind.speedKmh,
+        route = await applyWindEvaluation(
+          route,
+          body.start,
+          wind,
           priorities.tailwind,
+          body.tailwindTiming,
+          body.avgSpeedKmh,
           locale
         );
-
-        // evaluateWindDirection() only reports "reverse" when it's
-        // meaningfully better (not a coin-flip-close call), since re-routing
-        // the reversed sequence costs another OSRM round trip.
-        if (evaluation.chosenDirection === "reverse") {
-          const reversedNodes = [...route.knooppunten].reverse();
-          const sequence = [body.start, ...reversedNodes, body.start];
-          const osrmLegs = await routeChain(sequence, locale);
-          const reversedDistanceM = osrmLegs.reduce((s, l) => s + l.distanceM, 0);
-          const reversedDurationS = osrmLegs.reduce((s, l) => s + l.durationS, 0);
-          route = {
-            ...route,
-            knooppunten: reversedNodes,
-            legs: toRouteLegs(sequence, osrmLegs),
-            geometry: combineGeometry(osrmLegs),
-            totalDistanceM: reversedDistanceM,
-            totalDurationS: durationFromSpeed(reversedDistanceM, body.avgSpeedKmh, reversedDurationS),
-          };
-        }
-
-        route = { ...route, wind: evaluation };
       }
     }
 

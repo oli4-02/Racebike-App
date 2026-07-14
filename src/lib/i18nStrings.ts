@@ -24,27 +24,40 @@ export const COMPASS_LABELS: Record<AppLocale, string[]> = {
   nl: ["N", "NO", "O", "ZO", "Z", "ZW", "W", "NW"],
 };
 
+// Which half of the loop a rider wants tailwind on: the harder, later "return"
+// half (default -- fatigue makes headwind hurt more there) or the "outbound"
+// half instead. Used both to weight evaluateWindDirection()'s scoring and to
+// phrase the explanation text accordingly.
+export const WIND_PART_LABEL: Record<AppLocale, { return: string; outbound: string }> = {
+  de: { return: "zweiten (anstrengenderen)", outbound: "ersten (Hin-)" },
+  en: { return: "second (harder)", outbound: "first (outbound)" },
+  nl: { return: "tweede (zwaardere)", outbound: "eerste (heen-)" },
+};
+
 export const WIND_EXPLANATION: Record<
   AppLocale,
-  { forward: (compass: string, speedKmh: string) => string; reverse: (compass: string, speedKmh: string) => string }
+  {
+    forward: (compass: string, speedKmh: string, part: string) => string;
+    reverse: (compass: string, speedKmh: string, part: string) => string;
+  }
 > = {
   de: {
-    forward: (compass, speed) =>
-      `Wind aus ${compass} mit ${speed} km/h: Fahrtrichtung wie geplant gibt mehr Rückenwind im zweiten (anstrengenderen) Streckenteil.`,
-    reverse: (compass, speed) =>
-      `Wind aus ${compass} mit ${speed} km/h: Route wird umgekehrt gefahren, damit der zweite (anstrengendere) Streckenteil mehr Rückenwind bekommt.`,
+    forward: (compass, speed, part) =>
+      `Wind aus ${compass} mit ${speed} km/h: Fahrtrichtung wie geplant gibt mehr Rückenwind im ${part} Streckenteil.`,
+    reverse: (compass, speed, part) =>
+      `Wind aus ${compass} mit ${speed} km/h: Route wird umgekehrt gefahren, damit der ${part} Streckenteil mehr Rückenwind bekommt.`,
   },
   en: {
-    forward: (compass, speed) =>
-      `Wind from the ${compass} at ${speed} km/h: riding in the planned direction gives more tailwind in the harder second part of the route.`,
-    reverse: (compass, speed) =>
-      `Wind from the ${compass} at ${speed} km/h: the route is ridden in reverse so the harder second part gets more tailwind.`,
+    forward: (compass, speed, part) =>
+      `Wind from the ${compass} at ${speed} km/h: riding in the planned direction gives more tailwind in the ${part} part of the route.`,
+    reverse: (compass, speed, part) =>
+      `Wind from the ${compass} at ${speed} km/h: the route is ridden in reverse so the ${part} part gets more tailwind.`,
   },
   nl: {
-    forward: (compass, speed) =>
-      `Wind uit het ${compass} met ${speed} km/u: de geplande rijrichting geeft meer rugwind in het zwaardere tweede deel van de route.`,
-    reverse: (compass, speed) =>
-      `Wind uit het ${compass} met ${speed} km/u: de route wordt omgekeerd gereden, zodat het zwaardere tweede deel meer rugwind krijgt.`,
+    forward: (compass, speed, part) =>
+      `Wind uit het ${compass} met ${speed} km/u: de geplande rijrichting geeft meer rugwind in het ${part} deel van de route.`,
+    reverse: (compass, speed, part) =>
+      `Wind uit het ${compass} met ${speed} km/u: de route wordt omgekeerd gereden, zodat het ${part} deel meer rugwind krijgt.`,
   },
 };
 

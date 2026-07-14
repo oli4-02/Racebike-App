@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import RouteSummary from "@/components/RouteSummary";
 import TrainReturnPanel from "@/components/TrainReturnPanel";
 import ResultHero from "@/components/planner/ResultHero";
+import RoundTripAlternatives from "@/components/planner/RoundTripAlternatives";
 import StopCandidates from "@/components/planner/StopCandidates";
 import { LANDSCAPE_EMOJI, useLandscapeLabels } from "@/lib/scenicCorridors";
 import type {
@@ -11,6 +12,7 @@ import type {
   PlannedRoute,
   POI,
   RoadTypeResult,
+  RoundTripAlternative,
   RouteMode,
   ScenicRoutePlan,
   SignatureRoutePlan,
@@ -32,6 +34,9 @@ export default function ResultStep({
   stopRequests,
   selectedStopPoiIds,
   onSelectStopPoi,
+  alternatives,
+  selectedAlternativeIndex,
+  onSelectAlternative,
 }: {
   route: PlannedRoute | null;
   pois: POI[];
@@ -47,6 +52,10 @@ export default function ResultStep({
   stopRequests: StopRequest[];
   selectedStopPoiIds: Record<string, number>;
   onSelectStopPoi: (stopId: string, poiId: number) => void;
+  /** The 5 roundtrip variants the rider chooses from, computed by the main submit for roundtrip mode (see page.tsx). */
+  alternatives: RoundTripAlternative[] | null;
+  selectedAlternativeIndex: number | null;
+  onSelectAlternative: (index: number) => void;
 }) {
   const t = useTranslations("planner");
   const landscapeLabels = useLandscapeLabels();
@@ -54,7 +63,7 @@ export default function ResultStep({
   // Nothing computed yet -- the essentials section above already makes clear
   // what to fill in, so there's no need for a permanent "no route yet"
   // placeholder taking up space in the single-flow layout.
-  if (!route && !error) return null;
+  if (!route && !error && !alternatives) return null;
 
   return (
     <div className="flex flex-col gap-4 border-t border-meewind-border pt-4">
@@ -97,6 +106,15 @@ export default function ResultStep({
               : t("home.signatureDirectHint")}
           </p>
         </div>
+      )}
+
+      {alternatives && start && (
+        <RoundTripAlternatives
+          start={start}
+          alternatives={alternatives}
+          selectedIndex={selectedAlternativeIndex}
+          onSelect={onSelectAlternative}
+        />
       )}
 
       {route && (

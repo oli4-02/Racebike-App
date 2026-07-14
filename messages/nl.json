@@ -150,6 +150,18 @@
       },
       "direction": "Richting",
       "directionHint": "Kies een richting om echt het land in te fietsen in plaats van rondjes rond het startpunt.",
+      "tailwindTiming": {
+        "label": "Rugwind liever",
+        "return": "Op de terugweg",
+        "outbound": "Op de heenweg",
+        "hint": "Bepaalt welke helft van de route bij de automatische windevaluatie voorrang krijgt voor rugwind — standaard de terugweg, omdat tegenwind daar door vermoeidheid harder aankomt."
+      },
+      "planningSteps": {
+        "nodes": "Fietsknooppunten in de buurt zoeken…",
+        "wind": "Windvoorspelling laden…",
+        "routing": "Route berekenen…",
+        "almostDone": "Bijna klaar…"
+      },
       "directions": {
         "any": "Maakt niet uit (rondje bij start)",
         "n": "Noord",
@@ -212,9 +224,7 @@
       }
     },
     "alternatives": {
-      "show": "Toon 5 routevarianten",
-      "loading": "Varianten worden berekend…",
-      "error": "Varianten konden niet worden geladen.",
+      "chooseHeading": "Kies een van 5 windgeoptimaliseerde varianten",
       "choose": "Deze route kiezen",
       "chosen": "Gekozen ✓",
       "highlights": {

@@ -7,7 +7,7 @@ import RangeSlider from "@/components/ui/RangeSlider";
 import Select from "@/components/ui/Select";
 import Slider from "@/components/ui/Slider";
 import Toggle from "@/components/ui/Toggle";
-import type { AppMode, POICategory, Priorities, StopRequest } from "@/lib/types";
+import type { AppMode, POICategory, Priorities, StopRequest, TailwindTiming } from "@/lib/types";
 
 const POI_CATEGORIES: POICategory[] = ["fuel", "supermarket", "ice_cream", "cafe"];
 const STOP_CATEGORIES: POICategory[] = ["cafe", "ice_cream", "supermarket", "fuel"];
@@ -69,6 +69,8 @@ export default function CustomizeSection({
   appMode,
   direction,
   setDirection,
+  tailwindTiming,
+  setTailwindTiming,
   date,
   setDate,
   priorities,
@@ -85,6 +87,8 @@ export default function CustomizeSection({
   appMode: AppMode;
   direction: number | null;
   setDirection: (v: number | null) => void;
+  tailwindTiming: TailwindTiming;
+  setTailwindTiming: (v: TailwindTiming) => void;
   date: string;
   setDate: (v: string) => void;
   priorities: Priorities;
@@ -150,6 +154,29 @@ export default function CustomizeSection({
             options={directionOptions}
           />
           <p className="mt-1 text-xs text-meewind-fg-muted">{t("directionHint")}</p>
+        </div>
+      )}
+
+      {appMode === "roundtrip" && (
+        <div>
+          <span className="mb-1 block text-sm font-medium">{t("tailwindTiming.label")}</span>
+          <div className="flex overflow-hidden rounded-lg border border-meewind-border text-sm">
+            <button
+              type="button"
+              className={`flex-1 px-3 py-2 ${tailwindTiming === "return" ? "bg-meewind-accent text-meewind-accent-fg" : "bg-meewind-bg-raised"}`}
+              onClick={() => setTailwindTiming("return")}
+            >
+              {t("tailwindTiming.return")}
+            </button>
+            <button
+              type="button"
+              className={`flex-1 px-3 py-2 ${tailwindTiming === "outbound" ? "bg-meewind-accent text-meewind-accent-fg" : "bg-meewind-bg-raised"}`}
+              onClick={() => setTailwindTiming("outbound")}
+            >
+              {t("tailwindTiming.outbound")}
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-meewind-fg-muted">{t("tailwindTiming.hint")}</p>
         </div>
       )}
 

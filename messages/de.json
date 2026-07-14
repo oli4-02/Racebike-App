@@ -150,6 +150,18 @@
       },
       "direction": "Richtung",
       "directionHint": "Bestimmt eine Richtung, um eher hinaus aufs Land zu fahren statt im Kreis um den Startpunkt.",
+      "tailwindTiming": {
+        "label": "Rückenwind lieber",
+        "return": "Auf dem Rückweg",
+        "outbound": "Auf dem Hinweg",
+        "hint": "Bestimmt, welche Streckenhälfte bei der automatischen Windauswertung bevorzugt Rückenwind bekommt — Standard ist der Rückweg, weil Gegenwind dort durch die Erschöpfung stärker wehtut."
+      },
+      "planningSteps": {
+        "nodes": "Suche Fietsknooppunten in der Nähe…",
+        "wind": "Lade Windvorhersage…",
+        "routing": "Berechne Route…",
+        "almostDone": "Fast fertig…"
+      },
       "directions": {
         "any": "Egal (rund um den Start)",
         "n": "Norden",
@@ -212,9 +224,7 @@
       }
     },
     "alternatives": {
-      "show": "5 Routen-Varianten anzeigen",
-      "loading": "Berechne Varianten…",
-      "error": "Varianten konnten nicht geladen werden.",
+      "chooseHeading": "Wähle eine von 5 windoptimierten Varianten",
       "choose": "Diese Route wählen",
       "chosen": "Ausgewählt ✓",
       "highlights": {

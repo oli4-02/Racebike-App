@@ -150,6 +150,18 @@
       },
       "direction": "Direction",
       "directionHint": "Pick a direction to head out into the countryside instead of looping around the start point.",
+      "tailwindTiming": {
+        "label": "Prefer tailwind",
+        "return": "On the way back",
+        "outbound": "On the way out",
+        "hint": "Controls which half of the route the automatic wind evaluation favors for tailwind -- the way back by default, since headwind hurts more there once fatigue sets in."
+      },
+      "planningSteps": {
+        "nodes": "Searching nearby cycle nodes…",
+        "wind": "Loading wind forecast…",
+        "routing": "Calculating the route…",
+        "almostDone": "Almost done…"
+      },
       "directions": {
         "any": "Any (loop around start)",
         "n": "North",
@@ -212,9 +224,7 @@
       }
     },
     "alternatives": {
-      "show": "Show 5 route variants",
-      "loading": "Calculating variants…",
-      "error": "Could not load the variants.",
+      "chooseHeading": "Choose one of 5 wind-optimized variants",
       "choose": "Choose this route",
       "chosen": "Chosen ✓",
       "highlights": {

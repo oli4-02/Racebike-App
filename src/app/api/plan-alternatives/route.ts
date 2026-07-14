@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { NextRequest, NextResponse } from "next/server";
-import { planRoundTripAlternatives } from "@/lib/routePlanner";
+import { applyWindEvaluation, planRoundTripAlternatives } from "@/lib/routePlanner";
 import { resolveLocale } from "@/lib/resolveLocale";
 import {
   fetchWindForecast,
@@ -53,11 +53,31 @@ export async function POST(req: NextRequest) {
       ALTERNATIVE_COUNT
     );
 
-    const alternatives: RoundTripAlternative[] = results.map(({ direction, route, highlight }) => ({
+    // Each variant gets the same automatic "ride whichever direction gives
+    // more tailwind on the favored half" evaluation the single-route flow
+    // has always had -- otherwise these "5 wind-optimized options" wouldn't
+    // actually be wind-evaluated beyond the initial direction bias.
+    const evaluated = windInfo
+      ? await Promise.all(
+          results.map(({ direction, route, highlight }) =>
+            applyWindEvaluation(
+              route,
+              body.start,
+              windInfo,
+              priorities.tailwind,
+              body.tailwindTiming,
+              body.avgSpeedKmh,
+              locale
+            ).then((route) => ({ direction, route, highlight }))
+          )
+        )
+      : results;
+
+    const alternatives: RoundTripAlternative[] = evaluated.map(({ direction, route, highlight }) => ({
       direction,
       directionLabel:
         direction === null ? tDirections("any") : tDirections(directionLabelKey(direction)),
-      route: windInfo ? { ...route, windInfo } : route,
+      route,
       reason: tHighlights(highlight),
     }));
 

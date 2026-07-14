@@ -3,14 +3,11 @@
 import { useTranslations } from "next-intl";
 import AddressSearch from "@/components/AddressSearch";
 import OneWayTargetPicker, { type OneWaySubMode } from "@/components/OneWayTargetPicker";
-import RouteAlternativesPicker from "@/components/RouteAlternativesPicker";
 import SignatureRoutePicker from "@/components/SignatureRoutePicker";
 import Slider from "@/components/ui/Slider";
 import type {
   AppMode,
   LatLon,
-  PlannedRoute,
-  POICategory,
   Priorities,
   ScenicRoutePlan,
   SignatureRoutePlan,
@@ -23,14 +20,16 @@ import type {
  * section instead (see CustomizeSection), since they already have sensible
  * defaults. One-way and signature modes unavoidably need a bit more (a
  * destination or a picked tour) since that's the whole point of choosing
- * that mode, not an optional detail.
+ * that mode, not an optional detail. Pressing the main "Route planen"
+ * footer button (see page.tsx) is what actually computes a roundtrip --
+ * including its 5 variants -- there's no separate pre-submit entry point
+ * for that here.
  */
 export default function WhereStep({
   appMode,
   setAppMode,
   distanceKm,
   setDistanceKm,
-  direction,
   date,
   onSetStart,
   start,
@@ -42,9 +41,6 @@ export default function WhereStep({
   oneWaySubMode,
   priorities,
   avgSpeedKmh,
-  poiCategories,
-  avoidMainRoads,
-  onRouteAlternative,
   onSignatureRoute,
   onDistanceKmChange,
 }: {
@@ -52,7 +48,6 @@ export default function WhereStep({
   setAppMode: (m: AppMode) => void;
   distanceKm: number;
   setDistanceKm: (v: number) => void;
-  direction: number | null;
   date: string;
   onSetStart: (p: LatLon) => void;
   start: LatLon | null;
@@ -64,9 +59,6 @@ export default function WhereStep({
   oneWaySubMode: OneWaySubMode;
   priorities: Priorities;
   avgSpeedKmh: number;
-  poiCategories: POICategory[];
-  avoidMainRoads: boolean;
-  onRouteAlternative: (route: PlannedRoute) => void;
   onSignatureRoute: (result: SignatureRoutePlan) => void;
   onDistanceKmChange: (km: number) => void;
 }) {
@@ -147,20 +139,6 @@ export default function WhereStep({
           avgSpeedKmh={avgSpeedKmh}
           onDistanceKmChange={onDistanceKmChange}
           onPlanned={onSignatureRoute}
-        />
-      )}
-
-      {appMode === "roundtrip" && start && (
-        <RouteAlternativesPicker
-          start={start}
-          distanceKm={distanceKm}
-          date={date}
-          priorities={priorities}
-          direction={direction}
-          avgSpeedKmh={avgSpeedKmh}
-          poiCategories={poiCategories}
-          avoidMainRoads={avoidMainRoads}
-          onPlanned={onRouteAlternative}
         />
       )}
     </div>

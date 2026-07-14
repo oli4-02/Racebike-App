@@ -4,6 +4,7 @@ import { ROUTE_PLANNER_STRINGS } from "./i18nStrings";
 import { fetchAreaFeatures, fetchKnooppunten, legCrossesExcludedRoad, type AreaFeatures } from "./overpass";
 import { routeChain, type OsrmLeg } from "./osrm";
 import { resolveLocale } from "./resolveLocale";
+import { evaluateWindDirection } from "./wind";
 import type {
   Knooppunt,
   LatLon,
@@ -12,6 +13,7 @@ import type {
   POICategory,
   Priorities,
   RouteLeg,
+  TailwindTiming,
 } from "./types";
 import { DEFAULT_PRIORITIES } from "./types";
 
@@ -478,6 +480,56 @@ async function finalizeRoute(
   };
 }
 
+/**
+ * Runs the automatic tailwind-timing wind evaluation (see wind.ts) against
+ * an already-planned roundtrip route and, if riding the reversed knooppunt
+ * sequence is meaningfully better, re-routes it via OSRM and returns the
+ * updated route with `wind`/`windInfo` set. Shared by /api/plan (single
+ * route) and /api/plan-alternatives (all 5 variants) so both get the same
+ * "ride whichever direction gives more tailwind on the favored half"
+ * behavior instead of only the single-route flow having it.
+ */
+export async function applyWindEvaluation(
+  route: PlannedRoute,
+  start: LatLon,
+  windInfo: { directionDeg: number; speedKmh: number },
+  tailwindPriority: number,
+  tailwindTiming: TailwindTiming | undefined,
+  avgSpeedKmh: number | undefined,
+  locale: AppLocale
+): Promise<PlannedRoute> {
+  const windLegs = route.legs.map((l) => ({ from: l.from, to: l.to, distanceM: l.distanceM }));
+  const evaluation = evaluateWindDirection(
+    windLegs,
+    windInfo.directionDeg,
+    windInfo.speedKmh,
+    tailwindPriority,
+    locale,
+    tailwindTiming
+  );
+
+  if (evaluation.chosenDirection !== "reverse") {
+    return { ...route, windInfo, wind: evaluation };
+  }
+
+  const reversedNodes = [...route.knooppunten].reverse();
+  const sequence = [start, ...reversedNodes, start];
+  const osrmLegs = await routeChain(sequence, locale);
+  const reversedDistanceM = osrmLegs.reduce((s, l) => s + l.distanceM, 0);
+  const reversedDurationS = osrmLegs.reduce((s, l) => s + l.durationS, 0);
+
+  return {
+    ...route,
+    windInfo,
+    knooppunten: reversedNodes,
+    legs: toRouteLegs(sequence, osrmLegs),
+    geometry: combineGeometry(osrmLegs),
+    totalDistanceM: reversedDistanceM,
+    totalDurationS: durationFromSpeed(reversedDistanceM, avgSpeedKmh, reversedDurationS),
+    wind: evaluation,
+  };
+}
+
 const MAX_AVOID_MAIN_ROAD_PASSES = 4;
 
 /**
@@ -621,7 +673,10 @@ export async function planRoute(req: PlanRequest): Promise<PlannedRoute> {
   return finalizeRoute(req, nodes, targetDistanceM, pool, priorities, featureScores, locale);
 }
 
-const ALTERNATIVE_CONCURRENCY = 3;
+// Matches the default alternative count (5): the shared pool/feature fetch
+// is already a single Overpass round trip, so there's no reason to batch the
+// remaining per-variant OSRM work into two waves when all 5 can run at once.
+const ALTERNATIVE_CONCURRENCY = 5;
 
 /** Runs async tasks with at most `limit` in flight at once, preserving result order. */
 async function mapWithConcurrency<T, R>(

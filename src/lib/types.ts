@@ -9,6 +9,9 @@ export type Knooppunt = {
 
 export type POICategory = "fuel" | "supermarket" | "ice_cream" | "cafe";
 
+/** Which half of a roundtrip loop the automatic tailwind optimization should favor -- see wind.ts's evaluateWindDirection. */
+export type TailwindTiming = "return" | "outbound";
+
 export type POI = {
   id: number;
   category: POICategory;
@@ -96,6 +99,14 @@ export type PlanRequest = {
    * detect-and-insert-a-waypoint-then-recheck, not a single routing flag).
    */
   avoidMainRoads?: boolean;
+  /**
+   * Roundtrip-only: which half of the loop the automatic tailwind
+   * optimization (see wind.ts's evaluateWindDirection) should favor --
+   * "return" (default) picks whichever traversal direction gives more
+   * tailwind on the harder, later half; "outbound" flips that to favor
+   * tailwind on the way out instead.
+   */
+  tailwindTiming?: TailwindTiming;
   /** UI language, used to localize wind explanations, POI labels, and error messages generated server-side. Defaults to "de". */
   locale?: string;
 };
