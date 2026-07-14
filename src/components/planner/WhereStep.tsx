@@ -3,11 +3,8 @@
 import { useTranslations } from "next-intl";
 import AddressSearch from "@/components/AddressSearch";
 import OneWayTargetPicker, { type OneWaySubMode } from "@/components/OneWayTargetPicker";
-import PreferencesGateHint from "@/components/planner/PreferencesGateHint";
 import RouteAlternativesPicker from "@/components/RouteAlternativesPicker";
 import SignatureRoutePicker from "@/components/SignatureRoutePicker";
-import DateField from "@/components/ui/DateField";
-import Select from "@/components/ui/Select";
 import Slider from "@/components/ui/Slider";
 import type {
   AppMode,
@@ -19,27 +16,22 @@ import type {
   SignatureRoutePlan,
 } from "@/lib/types";
 
-const DIRECTION_OPTIONS: { value: number | null; key: string }[] = [
-  { value: null, key: "any" },
-  { value: 0, key: "n" },
-  { value: 45, key: "ne" },
-  { value: 90, key: "e" },
-  { value: 135, key: "se" },
-  { value: 180, key: "s" },
-  { value: 225, key: "sw" },
-  { value: 270, key: "w" },
-  { value: 315, key: "nw" },
-];
-
+/**
+ * The essentials: everything a rider must fill in before getting a first
+ * route. For the default roundtrip mode that's just start + distance --
+ * direction, date and all other tuning live in the collapsed "Anpassen"
+ * section instead (see CustomizeSection), since they already have sensible
+ * defaults. One-way and signature modes unavoidably need a bit more (a
+ * destination or a picked tour) since that's the whole point of choosing
+ * that mode, not an optional detail.
+ */
 export default function WhereStep({
   appMode,
   setAppMode,
   distanceKm,
   setDistanceKm,
   direction,
-  setDirection,
   date,
-  setDate,
   onSetStart,
   start,
   destination,
@@ -55,17 +47,13 @@ export default function WhereStep({
   onRouteAlternative,
   onSignatureRoute,
   onDistanceKmChange,
-  hasVisitedPreferences,
-  onGoToPreferences,
 }: {
   appMode: AppMode;
   setAppMode: (m: AppMode) => void;
   distanceKm: number;
   setDistanceKm: (v: number) => void;
   direction: number | null;
-  setDirection: (v: number | null) => void;
   date: string;
-  setDate: (v: string) => void;
   onSetStart: (p: LatLon) => void;
   start: LatLon | null;
   destination: LatLon | null;
@@ -81,17 +69,10 @@ export default function WhereStep({
   onRouteAlternative: (route: PlannedRoute) => void;
   onSignatureRoute: (result: SignatureRoutePlan) => void;
   onDistanceKmChange: (km: number) => void;
-  hasVisitedPreferences: boolean;
-  onGoToPreferences: () => void;
 }) {
   const t = useTranslations("planner.form");
   const isScenicMode = appMode === "oneway" && oneWaySubMode === "scenic";
   const isSignatureMode = appMode === "signature";
-
-  const directionOptions = DIRECTION_OPTIONS.map((opt) => ({
-    value: opt.value === null ? "any" : String(opt.value),
-    label: t(`directions.${opt.key}`),
-  }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -124,37 +105,23 @@ export default function WhereStep({
         </div>
       </div>
 
-      <Slider
-        value={distanceKm}
-        min={20}
-        max={200}
-        step={5}
-        onChange={setDistanceKm}
-        label={
-          appMode === "roundtrip"
-            ? t("distanceRoundtrip")
-            : isSignatureMode
-              ? t("distanceSignature")
+      {!isSignatureMode && (
+        <Slider
+          value={distanceKm}
+          min={20}
+          max={200}
+          step={5}
+          onChange={setDistanceKm}
+          label={
+            appMode === "roundtrip"
+              ? t("distanceRoundtrip")
               : isScenicMode
                 ? t("distanceScenic")
                 : t("distanceOneway")
-        }
-        valueLabel={`${distanceKm} km`}
-      />
-
-      {appMode === "roundtrip" && (
-        <div>
-          <Select
-            label={t("direction")}
-            value={direction === null ? "any" : String(direction)}
-            onChange={(v) => setDirection(v === "any" ? null : Number(v))}
-            options={directionOptions}
-          />
-          <p className="mt-1 text-xs text-meewind-fg-muted">{t("directionHint")}</p>
-        </div>
+          }
+          valueLabel={`${distanceKm} km`}
+        />
       )}
-
-      <DateField label={t("date")} value={date} onChange={setDate} />
 
       {appMode === "oneway" && start && (
         <OneWayTargetPicker
@@ -168,8 +135,6 @@ export default function WhereStep({
           onSelectDestination={onSelectDestination}
           onScenicRoute={onScenicRoute}
           onSubModeChange={onSubModeChange}
-          hasVisitedPreferences={hasVisitedPreferences}
-          onGoToPreferences={onGoToPreferences}
         />
       )}
 
@@ -186,21 +151,17 @@ export default function WhereStep({
       )}
 
       {appMode === "roundtrip" && start && (
-        hasVisitedPreferences ? (
-          <RouteAlternativesPicker
-            start={start}
-            distanceKm={distanceKm}
-            date={date}
-            priorities={priorities}
-            direction={direction}
-            avgSpeedKmh={avgSpeedKmh}
-            poiCategories={poiCategories}
-            avoidMainRoads={avoidMainRoads}
-            onPlanned={onRouteAlternative}
-          />
-        ) : (
-          <PreferencesGateHint onGoToPreferences={onGoToPreferences} />
-        )
+        <RouteAlternativesPicker
+          start={start}
+          distanceKm={distanceKm}
+          date={date}
+          priorities={priorities}
+          direction={direction}
+          avgSpeedKmh={avgSpeedKmh}
+          poiCategories={poiCategories}
+          avoidMainRoads={avoidMainRoads}
+          onPlanned={onRouteAlternative}
+        />
       )}
     </div>
   );

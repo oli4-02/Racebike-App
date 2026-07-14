@@ -96,13 +96,9 @@
       "title": "Meewind Planer",
       "subtitle": "Startpunkt wählen, Distanz einstellen — Meewind plant die windoptimierte Route entlang des Fietsknooppuntennetzes."
     },
-    "tabs": {
-      "where": "Wo & wie weit",
-      "preferences": "Vorlieben",
-      "result": "Ergebnis"
-    },
     "result": {
-      "empty": "Noch keine Route geplant. Fülle die anderen Schritte aus und klicke auf „Route planen“."
+      "title": "Ergebnis",
+      "windSpeed": "{speed} km/h Wind"
     },
     "addressSearch": {
       "startLabel": "Startadresse",
@@ -167,8 +163,8 @@
       },
       "hideSubmitSignature": "Oben eine Signature-Route auswählen, um die Route direkt zu planen.",
       "hideSubmitScenic": "Oben einen Korridor auswählen, um die Route direkt zu planen.",
-      "preferencesGateHint": "Lege zuerst deine Vorlieben fest, damit die Vorschläge zu dir passen.",
-      "goToPreferences": "Zu den Vorlieben",
+      "customize": "Anpassen",
+      "customizeHint": "Richtung, Prioritäten, Stopps, große Straßen, POI-Filter — alles mit sinnvollen Standardwerten",
       "submit": "Route planen",
       "submitLoading": "Route wird geplant…",
       "submitHintNoStart": "Startpunkt per Adresssuche oder Klick auf die Karte wählen.",

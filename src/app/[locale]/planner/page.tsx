@@ -2,12 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { useLocale, useTranslations } from "next-intl";
-import { useState } from "react";
-import PlannerPanel, { type PlannerTabKey } from "@/components/PlannerPanel";
-import PreferencesStep from "@/components/planner/PreferencesStep";
+import { useEffect, useRef, useState } from "react";
+import PlannerPanel from "@/components/PlannerPanel";
+import CustomizeSection from "@/components/planner/CustomizeSection";
 import ResultStep from "@/components/planner/ResultStep";
 import WhereStep from "@/components/planner/WhereStep";
 import type { OneWaySubMode } from "@/components/OneWayTargetPicker";
+import Collapsible from "@/components/ui/Collapsible";
 import { fetchPois, planRoute } from "@/lib/apiClient";
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type {
@@ -72,21 +73,16 @@ export default function PlannerPage() {
   // stopId -> the POI the rider picked for that stop from its candidate list.
   const [selectedStopPoiIds, setSelectedStopPoiIds] = useState<Record<string, number>>({});
 
-  const [activeTab, setActiveTab] = useState<PlannerTabKey>("where");
   const [collapsed, setCollapsed] = useState(false);
-  // The 5 roundtrip variants and one-way destination suggestions both rank
-  // candidates using `priorities` -- offering them before the rider has even
-  // looked at the preferences tab means they'd be scored against whatever
-  // defaults happen to be set, only to need redoing once adjusted. Gated
-  // behind having visited that tab at least once (not "confirmed" it --
-  // just having seen it is enough to make an informed choice or leave the
-  // defaults on purpose).
-  const [hasVisitedPreferences, setHasVisitedPreferences] = useState(false);
+  // Everything beyond start + distance (direction, priorities, stops, POI
+  // filters, avoid-main-roads) has a sensible default, so it starts tucked
+  // away here instead of forcing the rider through it before a first route.
+  const [customizeOpen, setCustomizeOpen] = useState(false);
 
-  function handleTabChange(tab: PlannerTabKey) {
-    setActiveTab(tab);
-    if (tab === "preferences") setHasVisitedPreferences(true);
-  }
+  const resultRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (route || error) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [route, error]);
 
   // The core planner only knows roundtrip/oneway; "signature" is a UI-level
   // mode that always resolves to a roundtrip plan via its own endpoint.
@@ -143,7 +139,6 @@ export default function PlannerPage() {
         locale
       );
       setRoute(planned);
-      setActiveTab("result");
       // POIs are a secondary, non-blocking overlay -- don't make the user
       // wait through another Overpass round trip before the route itself
       // (already computed) is shown.
@@ -151,7 +146,6 @@ export default function PlannerPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : t("home.routeError"));
       setRoute(null);
-      setActiveTab("result");
     } finally {
       setLoading(false);
     }
@@ -165,7 +159,6 @@ export default function PlannerPage() {
     setPois([]);
     setRoadTypeSegments([]);
     setSelectedStopPoiIds({});
-    setActiveTab("result");
     void loadPois(planned.geometry);
   }
 
@@ -179,7 +172,6 @@ export default function PlannerPage() {
     setPois([]);
     setRoadTypeSegments([]);
     setSelectedStopPoiIds({});
-    setActiveTab("result");
     void loadPois(result.route.geometry);
   }
 
@@ -193,7 +185,6 @@ export default function PlannerPage() {
     setPois([]);
     setRoadTypeSegments([]);
     setSelectedStopPoiIds({});
-    setActiveTab("result");
     void loadPois(result.route.geometry);
   }
 
@@ -248,12 +239,6 @@ export default function PlannerPage() {
   const selectedStopPoiIdSet = new Set(Object.values(selectedStopPoiIds));
   const selectedStopPois = pois.filter((p) => selectedStopPoiIdSet.has(p.id));
 
-  const tabs: { key: PlannerTabKey; label: string }[] = [
-    { key: "where", label: t("tabs.where") },
-    { key: "preferences", label: t("tabs.preferences") },
-    { key: "result", label: t("tabs.result") },
-  ];
-
   return (
     <div className="relative h-dvh w-full overflow-hidden">
       <div className="absolute inset-0">
@@ -280,9 +265,6 @@ export default function PlannerPage() {
         title={t("header.title")}
         subtitle={t("header.subtitle")}
         backLabel={t("backToLanding")}
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((c) => !c)}
         footer={
@@ -303,16 +285,14 @@ export default function PlannerPage() {
           )
         }
       >
-        {activeTab === "where" && (
+        <div className="flex flex-col gap-5">
           <WhereStep
             appMode={appMode}
             setAppMode={handleSetAppMode}
             distanceKm={distanceKm}
             setDistanceKm={setDistanceKm}
             direction={direction}
-            setDirection={setDirection}
             date={date}
-            setDate={setDate}
             onSetStart={handleSetStart}
             start={start}
             destination={destination}
@@ -332,46 +312,54 @@ export default function PlannerPage() {
             onRouteAlternative={handleRouteAlternative}
             onSignatureRoute={handleSignatureRoute}
             onDistanceKmChange={setDistanceKm}
-            hasVisitedPreferences={hasVisitedPreferences}
-            onGoToPreferences={() => handleTabChange("preferences")}
           />
-        )}
 
-        {activeTab === "preferences" && (
-          <PreferencesStep
-            priorities={priorities}
-            setPriorities={setPriorities}
-            avgSpeedKmh={avgSpeedKmh}
-            setAvgSpeedKmh={setAvgSpeedKmh}
-            poiCategories={poiCategories}
-            setPoiCategories={setPoiCategories}
-            stopRequests={stopRequests}
-            setStopRequests={setStopRequests}
-            avoidMainRoads={avoidMainRoads}
-            setAvoidMainRoads={setAvoidMainRoads}
-          />
-        )}
+          <Collapsible
+            title={t("form.customize")}
+            subtitle={t("form.customizeHint")}
+            open={customizeOpen}
+            onToggle={() => setCustomizeOpen((v) => !v)}
+          >
+            <CustomizeSection
+              appMode={appMode}
+              direction={direction}
+              setDirection={setDirection}
+              date={date}
+              setDate={setDate}
+              priorities={priorities}
+              setPriorities={setPriorities}
+              avgSpeedKmh={avgSpeedKmh}
+              setAvgSpeedKmh={setAvgSpeedKmh}
+              poiCategories={poiCategories}
+              setPoiCategories={setPoiCategories}
+              stopRequests={stopRequests}
+              setStopRequests={setStopRequests}
+              avoidMainRoads={avoidMainRoads}
+              setAvoidMainRoads={setAvoidMainRoads}
+            />
+          </Collapsible>
 
-        {activeTab === "result" && (
-          <ResultStep
-            route={route}
-            pois={pois}
-            selectedStopPois={selectedStopPois}
-            error={error}
-            mode={mode}
-            start={start}
-            date={date}
-            destination={destination}
-            scenicPlan={scenicPlan}
-            signaturePlan={signaturePlan}
-            onRoadTypeSegments={setRoadTypeSegments}
-            stopRequests={stopRequests}
-            selectedStopPoiIds={selectedStopPoiIds}
-            onSelectStopPoi={(stopId, poiId) =>
-              setSelectedStopPoiIds((prev) => ({ ...prev, [stopId]: poiId }))
-            }
-          />
-        )}
+          <div ref={resultRef}>
+            <ResultStep
+              route={route}
+              pois={pois}
+              selectedStopPois={selectedStopPois}
+              error={error}
+              mode={mode}
+              start={start}
+              date={date}
+              destination={destination}
+              scenicPlan={scenicPlan}
+              signaturePlan={signaturePlan}
+              onRoadTypeSegments={setRoadTypeSegments}
+              stopRequests={stopRequests}
+              selectedStopPoiIds={selectedStopPoiIds}
+              onSelectStopPoi={(stopId, poiId) =>
+                setSelectedStopPoiIds((prev) => ({ ...prev, [stopId]: poiId }))
+              }
+            />
+          </div>
+        </div>
       </PlannerPanel>
     </div>
   );

@@ -131,6 +131,17 @@ export async function fetchDestinationSuggestions(params: {
   return data.suggestions;
 }
 
+export async function fetchRegionImage(
+  point: LatLon,
+  locale: string
+): Promise<{ imageUrl: string; title: string } | null> {
+  const res = await fetch(
+    `/api/region-image?lat=${point.lat}&lon=${point.lon}&locale=${encodeURIComponent(locale)}`
+  );
+  const data = await parseOrThrow(res);
+  return data.image ?? null;
+}
+
 export async function fetchScenicCorridors(locale: string): Promise<ScenicCorridor[]> {
   const res = await fetch(`/api/scenic-corridors?locale=${encodeURIComponent(locale)}`);
   const data = await parseOrThrow(res);

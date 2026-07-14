@@ -4,8 +4,6 @@ import type { ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
 import LocaleSwitcher from "./LocaleSwitcher";
 
-export type PlannerTabKey = "where" | "preferences" | "result";
-
 function ChevronIcon({ collapsed }: { collapsed: boolean }) {
   return (
     <svg
@@ -27,14 +25,14 @@ function ChevronIcon({ collapsed }: { collapsed: boolean }) {
  * bottom sheet on narrow viewports, a card floating over the top-left of
  * the map on wider ones. Collapsing only ever shrinks it to the header bar
  * (never changes width), so the same class logic works at both breakpoints.
+ * Content is a single scrollable flow (no tabs) -- the caller is responsible
+ * for ordering essentials-first, with anything non-essential tucked behind
+ * its own collapsible section.
  */
 export default function PlannerPanel({
   title,
   subtitle,
   backLabel,
-  tabs,
-  activeTab,
-  onTabChange,
   collapsed,
   onToggleCollapsed,
   footer,
@@ -43,9 +41,6 @@ export default function PlannerPanel({
   title: string;
   subtitle: string;
   backLabel: string;
-  tabs: { key: PlannerTabKey; label: string }[];
-  activeTab: PlannerTabKey;
-  onTabChange: (key: PlannerTabKey) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   footer?: ReactNode;
@@ -103,25 +98,7 @@ export default function PlannerPanel({
 
       {!collapsed && (
         <>
-          <div className="flex shrink-0 border-b border-meewind-border">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => onTabChange(tab.key)}
-                className={`flex-1 px-2 py-2.5 text-xs font-medium transition-colors ${
-                  activeTab === tab.key
-                    ? "border-b-2 border-meewind-accent text-meewind-accent"
-                    : "border-b-2 border-transparent text-meewind-fg-muted hover:text-meewind-fg"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
           <div className="flex-1 overflow-y-auto p-4">{children}</div>
-
           {footer && <div className="shrink-0 border-t border-meewind-border p-4">{footer}</div>}
         </>
       )}

@@ -96,13 +96,9 @@
       "title": "Meewind Planner",
       "subtitle": "Kies een startpunt, stel de afstand in — Meewind plant de windgeoptimaliseerde route langs het knooppuntennetwerk."
     },
-    "tabs": {
-      "where": "Waar & hoe ver",
-      "preferences": "Voorkeuren",
-      "result": "Resultaat"
-    },
     "result": {
-      "empty": "Nog geen route gepland. Vul de andere stappen in en klik op \"Route plannen\"."
+      "title": "Resultaat",
+      "windSpeed": "{speed} km/u wind"
     },
     "addressSearch": {
       "startLabel": "Startadres",
@@ -167,8 +163,8 @@
       },
       "hideSubmitSignature": "Kies hierboven een signatuurroute om de route direct te plannen.",
       "hideSubmitScenic": "Kies hierboven een corridor om de route direct te plannen.",
-      "preferencesGateHint": "Stel eerst je voorkeuren in, zodat de suggesties echt bij je passen.",
-      "goToPreferences": "Naar voorkeuren",
+      "customize": "Aanpassen",
+      "customizeHint": "Richting, prioriteiten, stops, grote wegen, POI-filters — allemaal met zinvolle standaardwaarden",
       "submit": "Route plannen",
       "submitLoading": "Route wordt gepland…",
       "submitHintNoStart": "Kies een startpunt via adreszoeken of door op de kaart te klikken.",

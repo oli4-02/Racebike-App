@@ -6,12 +6,6 @@ import { fetchRoadTypeBreakdown } from "@/lib/apiClient";
 import { buildGpx } from "@/lib/gpx";
 import type { PlannedRoute, POI, RoadTypeBreakdown, RoadTypeSegment } from "@/lib/types";
 
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.round((seconds % 3600) / 60);
-  return h > 0 ? `${h} h ${m} min` : `${m} min`;
-}
-
 const ROAD_TYPE_SEGMENTS: { key: keyof RoadTypeBreakdown; color: string }[] = [
   { key: "cyclewayPct", color: "bg-meewind-accent" },
   { key: "residentialPct", color: "bg-amber-500" },
@@ -122,29 +116,11 @@ export default function RouteSummary({
   return (
     <div className="flex flex-col gap-3 rounded-md border border-meewind-border p-3 text-sm">
       <div className="flex justify-between">
-        <span className="text-meewind-fg-muted">{t("distance")}</span>
-        <span className="font-medium">
-          {(route.totalDistanceM / 1000).toFixed(1)} km
-        </span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-meewind-fg-muted">{t("duration")}</span>
-        <span className="font-medium">
-          {formatDuration(route.totalDurationS)}
-        </span>
-      </div>
-      <div className="flex justify-between">
         <span className="text-meewind-fg-muted">{t("knooppunten")}</span>
         <span className="font-medium">
           {route.knooppunten.map((k) => k.ref).join(" – ") || "–"}
         </span>
       </div>
-
-      {route.wind && (
-        <div className="rounded-md bg-meewind-accent/10 p-2 text-xs text-meewind-fg">
-          {route.wind.explanation}
-        </div>
-      )}
 
       <RoadTypeSummary
         key={routeIdentity(route)}

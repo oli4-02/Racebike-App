@@ -96,13 +96,9 @@
       "title": "Meewind Planner",
       "subtitle": "Pick a start point, set your distance — Meewind plans the wind-optimized route along the node network."
     },
-    "tabs": {
-      "where": "Where & how far",
-      "preferences": "Preferences",
-      "result": "Result"
-    },
     "result": {
-      "empty": "No route planned yet. Fill in the other steps and click \"Plan route\"."
+      "title": "Result",
+      "windSpeed": "{speed} km/h wind"
     },
     "addressSearch": {
       "startLabel": "Start address",
@@ -167,8 +163,8 @@
       },
       "hideSubmitSignature": "Pick a signature route above to plan the route directly.",
       "hideSubmitScenic": "Pick a corridor above to plan the route directly.",
-      "preferencesGateHint": "Set your preferences first so the suggestions actually match what you want.",
-      "goToPreferences": "Go to preferences",
+      "customize": "Customize",
+      "customizeHint": "Direction, priorities, stops, main roads, POI filters — all with sensible defaults",
       "submit": "Plan route",
       "submitLoading": "Planning route…",
       "submitHintNoStart": "Pick a start point via address search or by clicking the map.",

@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import RouteSummary from "@/components/RouteSummary";
 import TrainReturnPanel from "@/components/TrainReturnPanel";
+import ResultHero from "@/components/planner/ResultHero";
 import StopCandidates from "@/components/planner/StopCandidates";
 import { LANDSCAPE_EMOJI, useLandscapeLabels } from "@/lib/scenicCorridors";
 import type {
@@ -50,8 +51,15 @@ export default function ResultStep({
   const t = useTranslations("planner");
   const landscapeLabels = useLandscapeLabels();
 
+  // Nothing computed yet -- the essentials section above already makes clear
+  // what to fill in, so there's no need for a permanent "no route yet"
+  // placeholder taking up space in the single-flow layout.
+  if (!route && !error) return null;
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 border-t border-meewind-border pt-4">
+      <span className="meewind-display text-sm">{t("result.title")}</span>
+
       {error && (
         <div className="rounded-md bg-red-950/40 p-2 text-xs text-red-300 whitespace-pre-wrap break-words">
           {error}
@@ -91,15 +99,16 @@ export default function ResultStep({
         </div>
       )}
 
-      {route ? (
-        <RouteSummary
-          route={route}
-          pois={pois}
-          extraWaypoints={selectedStopPois}
-          onRoadTypeSegments={onRoadTypeSegments}
-        />
-      ) : (
-        !error && <p className="text-xs text-meewind-fg-muted">{t("result.empty")}</p>
+      {route && (
+        <>
+          <ResultHero route={route} />
+          <RouteSummary
+            route={route}
+            pois={pois}
+            extraWaypoints={selectedStopPois}
+            onRoadTypeSegments={onRoadTypeSegments}
+          />
+        </>
       )}
 
       {route && (

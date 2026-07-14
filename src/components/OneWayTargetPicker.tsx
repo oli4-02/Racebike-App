@@ -4,7 +4,6 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import AddressSearch from "./AddressSearch";
 import DestinationSuggestions from "./DestinationSuggestions";
-import PreferencesGateHint from "./planner/PreferencesGateHint";
 import ScenicCorridorPicker from "./ScenicCorridorPicker";
 import { fetchDestinationSuggestions } from "@/lib/apiClient";
 import type { DestinationSuggestion, LatLon, Priorities, ScenicRoutePlan } from "@/lib/types";
@@ -22,8 +21,6 @@ export default function OneWayTargetPicker({
   onSelectDestination,
   onScenicRoute,
   onSubModeChange,
-  hasVisitedPreferences,
-  onGoToPreferences,
 }: {
   start: LatLon;
   distanceKm: number;
@@ -35,8 +32,6 @@ export default function OneWayTargetPicker({
   onSelectDestination: (p: LatLon, label: string) => void;
   onScenicRoute: (result: ScenicRoutePlan) => void;
   onSubModeChange?: (m: OneWaySubMode) => void;
-  hasVisitedPreferences: boolean;
-  onGoToPreferences: () => void;
 }) {
   const t = useTranslations("planner.oneWay");
   const locale = useLocale();
@@ -103,33 +98,29 @@ export default function OneWayTargetPicker({
       {subMode === "address" && <AddressSearch onSelect={onSelectDestination} />}
 
       {subMode === "suggestions" && (
-        hasVisitedPreferences ? (
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={loadSuggestions}
-              disabled={loadingSuggestions}
-              className="rounded-md border border-meewind-border py-2 text-xs font-medium disabled:opacity-50"
-            >
-              {loadingSuggestions ? t("searching") : t("searchButton")}
-            </button>
-            {suggestError && (
-              <p className="text-xs text-red-400 whitespace-pre-wrap break-words">
-                {suggestError}
-              </p>
-            )}
-            {!suggestError && hasSearched && (
-              <DestinationSuggestions
-                start={start}
-                suggestions={suggestions}
-                loading={loadingSuggestions}
-                onSelect={(s) => onSelectDestination({ lat: s.lat, lon: s.lon }, s.name)}
-              />
-            )}
-          </div>
-        ) : (
-          <PreferencesGateHint onGoToPreferences={onGoToPreferences} />
-        )
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={loadSuggestions}
+            disabled={loadingSuggestions}
+            className="rounded-md border border-meewind-border py-2 text-xs font-medium disabled:opacity-50"
+          >
+            {loadingSuggestions ? t("searching") : t("searchButton")}
+          </button>
+          {suggestError && (
+            <p className="text-xs text-red-400 whitespace-pre-wrap break-words">
+              {suggestError}
+            </p>
+          )}
+          {!suggestError && hasSearched && (
+            <DestinationSuggestions
+              start={start}
+              suggestions={suggestions}
+              loading={loadingSuggestions}
+              onSelect={(s) => onSelectDestination({ lat: s.lat, lon: s.lon }, s.name)}
+            />
+          )}
+        </div>
       )}
 
       {subMode === "scenic" && (

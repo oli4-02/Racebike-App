@@ -118,25 +118,17 @@ inset-x-0 bottom-0`, ~82vh hoch), auf breiteren als Karte oben links
 nur auf die Header-Zeile (nie die Breite), sodass dieselbe Klassenlogik für
 beide Breakpoints reicht.
 
-Der Panel-Inhalt ist in drei Tabs gegliedert (nicht mehr eine lange Liste
-untereinander):
-- **Wo & wie weit** (`WhereStep.tsx`) — Start, Tourtyp, Distanz, Richtung,
-  Datum, sowie je nach Modus der Ziel-/Korridor-/Signature-Picker und (bei
-  Rundtour) die 5-Varianten-Auswahl
-- **Deine Vorlieben** (`PreferencesStep.tsx`) — Prioritäten-Radar,
-  Ø-Geschwindigkeit, POI-Kategorien
-- **Ergebnis** (`ResultStep.tsx`) — Fehleranzeige, Korridor-/Signature-Info,
-  `RouteSummary`, Zugverbindungen
-
-Der "Route planen"-Button lebt als fester Footer im Panel-Rahmen (in allen
-Tabs außer "Ergebnis" sichtbar, außer bei Landschafts-/Signature-Route, die
-direkt bei Auswahl planen); jede erfolgreiche Planung springt automatisch in
-den "Ergebnis"-Tab. Diese drei Tab-Inhalte und der Footer bleiben in
-`page.tsx` zusammengesetzt, `PlannerPanel` selbst ist reine Hülle
-(Header/Tabs/Collapse/Footer-Slot) ohne eigenes Domänenwissen.
+Der Panel-Inhalt war ursprünglich in drei Tabs gegliedert ("Wo & wie weit" /
+"Deine Vorlieben" / "Ergebnis"); das ist inzwischen durch einen einzigen
+Fluss ohne Tabs ersetzt (siehe "Zwei Eingaben statt Formular" unten) — die
+Tabs zwangen dazu, erst durch mehrere Schritte zu klicken, bevor überhaupt
+eine Route entstand. `PlannerPanel.tsx` selbst ist reine Hülle
+(Header/Collapse/Footer-Slot, scrollbarer Inhaltsbereich) ohne eigenes
+Domänenwissen; `page.tsx` setzt darüber `WhereStep` (Pflichtfelder),
+`Collapsible` (Anpassen) und `ResultStep` in dieser Reihenfolge zusammen.
 
 `PlannerForm.tsx` und `PrioritySliders.tsx` sind komplett entfernt — ihr
-Inhalt lebt jetzt in `WhereStep.tsx`/`PreferencesStep.tsx`, `AppMode` ist
+Inhalt lebt jetzt in `WhereStep.tsx`/`CustomizeSection.tsx`, `AppMode` ist
 nach `lib/types.ts` gewandert (dort ohnehin schon `RouteMode` definiert).
 
 **Wichtige Falle beim Bauen des Panels**: die Kopfzeile war zunächst selbst
@@ -184,6 +176,35 @@ zu, wird die passende Kachel hervorgehoben, sonst keine (manuell abweichende
 Werte gelten als "eigene Einstellung", ohne aktive Kachel). Dadurch bleiben
 Kacheln und Feinjustierung immer konsistent, unabhängig davon, in welcher
 Reihenfolge der Nutzer sie bedient.
+
+### Ergebnis-Hero: Region-Foto, große Windgrafik, zwei große Kennzahlen
+
+Das Ergebnis zeigte bisher nur Zahlen (Distanz, Zeit, Knotenpunkte,
+Windtext) direkt untereinander. `ResultHero.tsx` (gerendert von
+`ResultStep.tsx` direkt über der weiterhin bestehenden `RouteSummary`) macht
+daraus eine visuell stärkere erste Ansicht:
+
+- **Region-Foto** (`RegionPhoto.tsx`): anders als die kuratierten
+  Landingpage-Fotos kann dieses Bild nicht vorher von Hand ausgesucht
+  werden — die Route kann überall in NL/BE liegen. `fetchNearbyRegionImage()`
+  (in `lib/wikipedia.ts`) nutzt Wikipedias `geosearch` als Generator
+  (`generator=geosearch&ggscoord=…`) um den geografischen Mittelpunkt der
+  Routen-Geometrie herum, kombiniert mit `prop=pageimages`, und nimmt den
+  ersten Treffer, der tatsächlich ein Thumbnail hat (nicht jeder nahegelegene
+  Artikel hat eins). Best-effort über `/api/region-image`: kein Treffer oder
+  ein fehlgeschlagener Bild-Load blendet die Komponente einfach aus, statt
+  einen Fehlerzustand zu zeigen.
+- **Große Windgrafik**: derselbe Pfeil-Kompass-Gedanke wie der kleine
+  `WindCompassOverlay` auf der Karte, aber deutlich größer und direkt im
+  Ergebnis-Panel neben den Kennzahlen platziert (`route.windInfo`, für beide
+  Modi verfügbar) statt nur als kleines Karten-Overlay in der Ecke; bei
+  Rundtouren ergänzt um den vorhandenen Begründungstext
+  (`route.wind?.explanation`).
+- **Zwei große Kennzahlen**: Distanz und Fahrzeit werden jetzt groß
+  (`text-2xl font-bold`) direkt nebeneinander dargestellt, statt als eine
+  von mehreren gleich großen Zeilen. `RouteSummary` selbst zeigt nur noch
+  Knotenpunkte, Straßentyp-Aufteilung und GPX-Export — die Distanz-/
+  Zeit-/Windzeilen wurden dort entfernt, um Dopplung zu vermeiden.
 
 ### "Stopps planen": gezielte POI-Suche pro Streckenabschnitt
 
@@ -292,24 +313,47 @@ zur Hälfte abgeschnitten dargestellt. `AutoInvalidateSize` (in
 bei jeder Größenänderung `map.invalidateSize()` — allgemeiner und robuster
 als jeden einzelnen Layout-Auslöser einzeln zu jagen.
 
-### Vorlieben zuerst: Vorschläge erst nach einem Blick auf "Deine Vorlieben"
+### Zwei Eingaben statt Formular: Start + Distanz, Rest mit Default
 
-Die 5 Rundtour-Varianten und die One-Way-Zielvorschläge ranken ihre
-Kandidaten beide anhand von `priorities` — bot man sie schon im "Wo & wie
-weit"-Tab an, bevor der Nutzer die Prioritäten-Regler überhaupt gesehen
-hatte, wurden sie gegen die Standard-Gewichtung berechnet und mussten nach
-dem Anpassen der Vorlieben ohnehin neu geholt werden. `page.tsx` merkt sich
-jetzt `hasVisitedPreferences` (wird beim ersten Wechsel zum
-"Vorlieben"-Tab `true`, bleibt das auch beim Zurückwechseln) und reicht das
-zusammen mit einem `onGoToPreferences`-Callback an `WhereStep` und
-`OneWayTargetPicker` durch. Bis dahin zeigt `PreferencesGateHint` (neue,
-gemeinsam genutzte Komponente) statt des "5 Routen-Varianten
-anzeigen"-Buttons bzw. der Vorschläge-Suche einen Hinweis mit Sprung-Button
-zum Vorlieben-Tab. Die direkte Zieladresseneingabe und die
-Landschafts-/Signature-Route-Listen sind davon bewusst nicht betroffen — sie
-nutzen `priorities` gar nicht (Adresseingabe) oder nur als leichten,
-nachrangigen Einfluss auf eine ohnehin manuell gewählte Tour (Korridor/
-Signature-Route), nicht als das Ranking-Kriterium selbst.
+Die alte Tab-Struktur ("Wo & wie weit" / "Deine Vorlieben" / "Ergebnis")
+zwang dazu, mehrere Schritte durchzuklicken, bevor überhaupt eine Route
+entstand — obwohl Richtung, Prioritäten, Stopps, POI-Filter und
+"Große Straßen vermeiden" längst sinnvolle Defaults hatten
+(`DEFAULT_PRIORITIES` ist z. B. für alle vier Dimensionen ausgeglichen bei
+0,5). Der Panel-Inhalt ist jetzt ein einziger, tabloser Fluss:
+
+- **Pflichtfelder direkt sichtbar** (`WhereStep.tsx`): Startadresse,
+  Tourtyp-Umschalter (Standard: Rundtour) und Distanz-Slider — für die
+  Rundtour reicht das für einen ersten "Route planen"-Klick. One-Way und
+  Signature-Route brauchen zwangsläufig etwas mehr (eine Zieladresse bzw.
+  eine ausgewählte Tour), da das der Sinn dieser Modi selbst ist, kein
+  optionales Detail.
+- **"Anpassen"** (`Collapsible.tsx` um `CustomizeSection.tsx`, umbenannt aus
+  `PreferencesStep.tsx`): standardmäßig eingeklappt, enthält Richtung, Datum,
+  Prioritäten-Presets/Feinjustierung, Ø-Geschwindigkeit,
+  "Große Straßen vermeiden", Stopp-Planung und POI-Kategorie-Toggle — alles
+  aus einem gemeinsamen State, keine gespiegelte Kopie.
+- **Ergebnis** (`ResultStep.tsx`): rendert `null`, solange weder eine Route
+  noch ein Fehler vorliegt (keine dauerhafte "noch keine Route"-Platzhalter-
+  Fläche mehr), erscheint sonst am Ende desselben Panels. `page.tsx` scrollt
+  per `ref` + `scrollIntoView` automatisch dorthin, sobald `route` oder
+  `error` gesetzt wird, damit das Ergebnis auch dann sichtbar wird, wenn der
+  Nutzer im eingeklappten "Anpassen"-Bereich nach unten gescrollt war.
+
+Damit einher geht die Entfernung des früheren `hasVisitedPreferences`-Gates
+(`PreferencesGateHint.tsx`, gelöscht): Die 5 Rundtour-Varianten und die
+One-Way-Zielvorschläge waren zuvor hinter "erst den Vorlieben-Tab besucht
+haben" versteckt, weil sie `priorities` zum Ranking nutzen. Das ergab nur
+Sinn, solange man erst durch ein Formular musste, um überhaupt bei den
+Prioritäten anzukommen — jetzt, wo die Defaults selbst schon der Sinn der
+Übung sind, würde ein Gate dem eigentlichen Ziel (Ergebnis in Sekunden)
+direkt widersprechen. Beide Funktionen rendern jetzt unconditional, sobald
+ein Startpunkt gesetzt ist.
+
+`PlannerPanel.tsx` selbst hat keine Tabs mehr, nur noch Header (mit
+Zurück-Link, Sprachumschalter, Ein-/Ausklapp-Button), einen scrollbaren
+Inhaltsbereich (`children`) und einen optionalen Footer-Slot für den
+"Route planen"-Button.
 
 ### Mehrsprachigkeit (DE/EN/NL)
 
@@ -736,6 +780,11 @@ eigenen Zuhause, sondern am Korridor selbst:
   Liniensegment — bei sehr groben Routen-Geometrien (wenige Vertices auf
   einem langen, geraden Teilstück) kann der berechnete Streckenanteil daher
   leicht von der tatsächlichen Position abweichen.
+- Das Region-Foto im Ergebnis (`RegionPhoto.tsx`) findet nur dann ein Bild,
+  wenn ein geo-getaggter Wikipedia-Artikel mit Thumbnail im 12km-Radius um
+  den Routen-Mittelpunkt existiert — in sehr ländlichen oder dünn auf
+  Wikipedia dokumentierten Gegenden bleibt die Fläche dann leer, statt ein
+  falsches oder generisches Bild zu erzwingen.
 
 ## Setup
 
