@@ -2,15 +2,28 @@
 
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import DateField from "@/components/ui/DateField";
 import RangeSlider from "@/components/ui/RangeSlider";
 import Select from "@/components/ui/Select";
 import Slider from "@/components/ui/Slider";
 import Toggle from "@/components/ui/Toggle";
-import type { POICategory, Priorities, StopRequest } from "@/lib/types";
+import type { AppMode, POICategory, Priorities, StopRequest } from "@/lib/types";
 
 const POI_CATEGORIES: POICategory[] = ["fuel", "supermarket", "ice_cream", "cafe"];
 const STOP_CATEGORIES: POICategory[] = ["cafe", "ice_cream", "supermarket", "fuel"];
 const MAX_STOPS = 3;
+
+const DIRECTION_OPTIONS: { value: number | null; key: string }[] = [
+  { value: null, key: "any" },
+  { value: 0, key: "n" },
+  { value: 45, key: "ne" },
+  { value: 90, key: "e" },
+  { value: 135, key: "se" },
+  { value: 180, key: "s" },
+  { value: 225, key: "sw" },
+  { value: 270, key: "w" },
+  { value: 315, key: "nw" },
+];
 
 // The 4 tunable priority dimensions exposed as presets/sliders. `poiDensity`
 // isn't a dial here anymore -- planning an actual stop (see StopsPlanner
@@ -52,7 +65,12 @@ function newStopRequest(category: POICategory): StopRequest {
   };
 }
 
-export default function PreferencesStep({
+export default function CustomizeSection({
+  appMode,
+  direction,
+  setDirection,
+  date,
+  setDate,
   priorities,
   setPriorities,
   avgSpeedKmh,
@@ -64,6 +82,11 @@ export default function PreferencesStep({
   avoidMainRoads,
   setAvoidMainRoads,
 }: {
+  appMode: AppMode;
+  direction: number | null;
+  setDirection: (v: number | null) => void;
+  date: string;
+  setDate: (v: string) => void;
   priorities: Priorities;
   setPriorities: (p: Priorities) => void;
   avgSpeedKmh: number;
@@ -78,6 +101,11 @@ export default function PreferencesStep({
   const t = useTranslations("planner.form");
   const tPriorities = useTranslations("planner.priorities");
   const [fineTuneOpen, setFineTuneOpen] = useState(false);
+
+  const directionOptions = DIRECTION_OPTIONS.map((opt) => ({
+    value: opt.value === null ? "any" : String(opt.value),
+    label: t(`directions.${opt.key}`),
+  }));
 
   const poiLabels: Record<POICategory, string> = {
     fuel: t("poiFuel"),
@@ -113,6 +141,20 @@ export default function PreferencesStep({
 
   return (
     <div className="flex flex-col gap-5">
+      {appMode === "roundtrip" && (
+        <div>
+          <Select
+            label={t("direction")}
+            value={direction === null ? "any" : String(direction)}
+            onChange={(v) => setDirection(v === "any" ? null : Number(v))}
+            options={directionOptions}
+          />
+          <p className="mt-1 text-xs text-meewind-fg-muted">{t("directionHint")}</p>
+        </div>
+      )}
+
+      <DateField label={t("date")} value={date} onChange={setDate} />
+
       <div>
         <span className="mb-2 block text-sm font-medium">{tPriorities("title")}</span>
         <div className="grid grid-cols-2 gap-2">
