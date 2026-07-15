@@ -365,6 +365,14 @@ export function durationFromSpeed(
 }
 
 const TOLERANCE = 0.08; // accept +/-8% of target distance -- tightened from +/-20% after a report of routes landing 50-90% over the requested distance
+// A route that still can't hit +/-8% after every refine iteration (a sparse
+// knooppunt pool for a particular direction/distance, most often) used to
+// just get thrown away entirely -- correct, but a rider would rather get a
+// still-reasonable route than an error or a missing variant. This is a
+// last-resort acceptance band, not the target: the loop above always aims
+// for TOLERANCE first, this only decides what's still acceptable to return
+// once iterations run out.
+const FALLBACK_TOLERANCE = 0.2;
 const MAX_REFINE_ITERATIONS = 5;
 // Correcting the full measured overshoot/undershoot in one shot tends to
 // overcorrect (drop too many nodes, then need to add most of them back next
@@ -495,7 +503,7 @@ async function finalizeRoute(
   }
 
   const finalRatio = totalDistanceM / targetDistanceM;
-  if (finalRatio < 1 - TOLERANCE || finalRatio > 1 + TOLERANCE) {
+  if (finalRatio < 1 - FALLBACK_TOLERANCE || finalRatio > 1 + FALLBACK_TOLERANCE) {
     throw new Error(ROUTE_PLANNER_STRINGS[locale].distanceToleranceFailed);
   }
 

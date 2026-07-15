@@ -584,14 +584,23 @@ Behoben in `finalizeRoute()`:
   braucht dadurch typischerweise 2-3 statt (erfolglos) 3 Iterationen.
   `MAX_REFINE_ITERATIONS` dabei leicht erhöht (3 → 5), da die engere Toleranz
   mehr Feinschliff-Durchläufe nahe der Zielgrenze brauchen kann.
-- **Harte Durchsetzung statt stillem Ignorieren**: Erreicht eine Route nach
-  allen Iterationen die Toleranz immer noch nicht, wirft `finalizeRoute()`
-  jetzt einen Fehler (`distanceToleranceFailed`), statt sie trotzdem
-  zurückzugeben. Für die Einzelroute (`planRoute()`) heißt das ein ehrlicher
-  Fehler statt einer Route, die ihr eigenes Distanz-Versprechen bricht; bei
-  den 5 Varianten (`planRoundTripAlternatives()`) wird die betroffene
-  Richtung einfach übersprungen (`try/catch` um den Aufruf, `null` gefiltert)
-  — die anderen Kandidaten sind davon unabhängig.
+- **Durchsetzung statt stillem Ignorieren, aber mit Sicherheitsnetz**:
+  Erreicht eine Route nach allen Iterationen nicht einmal die ±8%-Zielband,
+  akzeptiert `finalizeRoute()` sie trotzdem, solange sie wenigstens innerhalb
+  einer weiteren Rückfall-Toleranz (`FALLBACK_TOLERANCE`, ±20% — bewusst
+  derselbe Wert wie die alte, zu lockere Grenze) liegt; nur wenn selbst das
+  nicht erreicht wird, wirft sie einen Fehler (`distanceToleranceFailed`).
+  Grund: Ein Nutzer-Feedback direkt nach dem ersten Fix ("dass es
+  funktioniert hat Priorität, wenn es dafür länger laden muss ist das so")
+  machte deutlich, dass eine fehlende Variante schlimmer ist als eine, die
+  zwar nicht ganz die enge ±8%-Zielmarke trifft, aber immer noch klar
+  brauchbar ist (±20% statt eines Fehlers oder einer 48-88%-Abweichung wie
+  im ursprünglichen Bug-Report). Für die Einzelroute (`planRoute()`) bedeutet
+  ein tatsächlicher Fehlschlag (auch ±20% nicht erreicht) einen ehrlichen
+  Fehler statt einer Route, die ihr Distanz-Versprechen bricht; bei den 5
+  Varianten (`planRoundTripAlternatives()`) wird die betroffene Richtung
+  einfach übersprungen (`try/catch` um den Aufruf, `null` gefiltert) — die
+  anderen Kandidaten sind davon unabhängig.
 
 Diese Verifikation lief nur als eigenständige numerische Nachrechnung der
 Korrektur-Formel (kein Zugriff auf echtes Overpass/OSRM in dieser Sandbox):
@@ -950,16 +959,21 @@ Overpass, OSRM und Open-Meteo benötigen keine Keys.
 Der öffentliche Overpass-Dienst ist ein geteilter Community-Server ohne SLA
 und reagiert bei hoher Last mit 429 (Rate-Limit) oder 502/503/504
 (überlastet/Gateway-Timeout). `runOverpassQuery` in `src/lib/overpass.ts`
-probiert dafür bis zu drei Mirrors durch:
+probiert dafür zwei Mirrors durch:
 
-- `overpass-api.de`, `lz4.overpass-api.de` (dessen Lastverteilungs-Frontend)
-  und `overpass.kumi.systems`. Wichtiger als "drei statt zwei Server" ist
-  dabei, *wessen* Server: die ersten beiden laufen beim selben Betreiber und
-  können unter echter Last beide gleichzeitig überlastet/rate-limitiert
-  sein (keine wirklich unabhängige Kapazität); Kumi Systems betreibt eine
-  eigenständige, separat gehostete Instanz — der einzige der drei Mirrors,
-  der bei einer Lastspitze der `overpass-api.de`-Infrastruktur tatsächlich
-  noch unabhängig davon verfügbar sein kann.
+- `overpass-api.de` und `overpass.kumi.systems`. Bewusst nur zwei statt
+  drei: `lz4.overpass-api.de` (dessen Lastverteilungs-Frontend) lief
+  probeweise als dritter Mirror mit, wurde aber wieder entfernt — es teilt
+  sich vermutlich dieselbe Backend-Kapazität mit `overpass-api.de` (unter
+  echter Last können beide gleichzeitig überlastet/rate-limitiert sein,
+  bringt also wenig echte Redundanz), kostet aber im schlimmsten Fall einen
+  vollen `REQUEST_TIMEOUT_MS`-Slot Zeitbudget. Kumi Systems betreibt dagegen
+  eine eigenständige, separat gehostete Instanz und ist der einzige der
+  beiden Mirrors, der bei einer Lastspitze der `overpass-api.de`-
+  Infrastruktur tatsächlich noch unabhängig davon verfügbar sein kann.
+  Weniger, aber echter unabhängige Mirrors lassen außerdem mehr vom
+  serverseitigen Zeitbudget (siehe `maxDuration` unten) für das
+  OSRM-/Refine-Routing übrig, das danach noch laufen muss.
 - Fehlermeldungen zeigen nicht mehr die rohe HTML-Fehlerseite an (nur
   störender Markup-Müll), sondern eine kurze Status-Erklärung, plus einen
   Hinweis "Bitte in ein paar Sekunden erneut versuchen", wenn alle Fehler auf
@@ -981,11 +995,11 @@ Minuten aufsummieren, bevor der Nutzer überhaupt eine Rückmeldung sah.
 Jetzt gilt bewusst "schnell und klar scheitern" statt "lange und leise
 warten":
 
-- `runOverpassQuery` probiert jeden der drei Mirrors nur noch **genau
-  einmal**, in Reihenfolge, und wechselt bei jedem Fehler (429, 502/503/504,
-  Timeout, Netzwerkfehler — ausnahmslos) sofort zum nächsten, statt auf
-  demselben Server zu warten und erneut zu versuchen. Kein zweiter
-  Durchlauf über die ganze Liste mehr.
+- `runOverpassQuery` probiert jeden Mirror nur noch **genau einmal**, in
+  Reihenfolge, und wechselt bei jedem Fehler (429, 502/503/504, Timeout,
+  Netzwerkfehler — ausnahmslos) sofort zum nächsten, statt auf demselben
+  Server zu warten und erneut zu versuchen. Kein zweiter Durchlauf über die
+  ganze Liste mehr.
 - Das clientseitige Anfrage-Timeout ist von 30s auf 18s reduziert, und die
   serverseitigen `[timeout:…]`-Werte in den Overpass-Queries selbst von
   20-30s auf einheitlich 15s — Overpass soll selbst schneller aufgeben und
@@ -994,10 +1008,13 @@ warten":
   clientseitige Timeout liegt bewusst ein paar Sekunden über dem
   serverseitigen, als Sicherheitsnetz für eine hängende Verbindung, die
   Overpass' eigenes Timeout nie erreicht (nicht als primärer Abbruch).
-- Damit ist die Overpass-Phase jetzt auf ca. 3 × 18s ≈ 54s im absoluten
-  Worst Case begrenzt (alle drei Mirrors hängen tatsächlich bis zum
-  Timeout) statt der vorherigen mehreren Minuten — im typischen Fall
-  (irgendein Mirror antwortet normal) bleibt es bei wenigen Sekunden.
+- Damit ist die Overpass-Phase jetzt auf ca. 2 × 18s ≈ 36s im absoluten
+  Worst Case begrenzt (beide Mirrors hängen tatsächlich bis zum Timeout)
+  statt der vorherigen mehreren Minuten — im typischen Fall (irgendein
+  Mirror antwortet normal) bleibt es bei wenigen Sekunden. Die verbleibenden
+  ~24s des `maxDuration`-Budgets (siehe unten) bleiben dann für das
+  OSRM-Routing samt Refine-Durchläufen übrig, die pro Rundtour-Variante
+  danach noch laufen.
 
 Das sind Abmilderungen, keine Garantie — bei anhaltender Überlastung des
 öffentlichen Dienstes (nicht nur einer kurzen Spitze) hilft nur Warten oder

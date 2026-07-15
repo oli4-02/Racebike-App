@@ -3,15 +3,21 @@ import { distance } from "./geo";
 import { OVERPASS_STRINGS, POI_CATEGORY_LABELS } from "./i18nStrings";
 import type { Knooppunt, LatLon, POI, POICategory, RoadTypeBreakdown, RoadTypeResult, RoadTypeSegment } from "./types";
 
-// overpass-api.de and its lz4 load-balanced frontend are the same operator's
-// infrastructure -- under real load they can both be rate-limited/overloaded
-// at once (a 429 on one right after a 504 on the other, rather than genuine
-// independent capacity). Kumi Systems runs a separately operated public
-// mirror, so it's the one endpoint here actually likely to still be up when
-// the other two aren't.
+// Deliberately just two mirrors, not three: overpass-api.de and its lz4
+// load-balanced frontend are the same operator's infrastructure -- under
+// real load they can both be rate-limited/overloaded at once (a 429 on one
+// right after a 504 on the other, rather than genuine independent
+// capacity), so keeping both in the fallback chain buys little real
+// resilience while still costing a full timeout's worth of latency. Kumi
+// Systems runs a separately operated public mirror and is worth trying
+// instead; the whole app also has to fit within Vercel's serverless
+// function time limit (see /api/plan/route.ts's maxDuration), and every
+// mirror in this list is a full REQUEST_TIMEOUT_MS-sized slice of that
+// budget in the worst case -- fewer, more genuinely independent mirrors
+// leaves more of that budget for the OSRM/refine work that has to happen
+// afterward.
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
-  "https://lz4.overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
 ];
 
@@ -83,10 +89,10 @@ function summarizeErrorBody(status: number, statusText: string, body: string, lo
 /**
  * Tries each mirror once, in order, moving on immediately on any failure
  * (rate limit, overload, timeout, network error alike) -- worst case is
- * bounded at roughly 3 * REQUEST_TIMEOUT_MS instead of the open-ended
- * multi-round/multi-attempt retries this used to do. A fast, clear failure
- * is better for the rider than a slow one, even if it's occasionally less
- * likely to ride out a load spike.
+ * bounded at roughly OVERPASS_ENDPOINTS.length * REQUEST_TIMEOUT_MS instead
+ * of the open-ended multi-round/multi-attempt retries this used to do. A
+ * fast, clear failure is better for the rider than a slow one, even if it's
+ * occasionally less likely to ride out a load spike.
  */
 async function runOverpassQuery(query: string, locale: AppLocale = routing.defaultLocale): Promise<OverpassResponse> {
   const attempts: string[] = [];
