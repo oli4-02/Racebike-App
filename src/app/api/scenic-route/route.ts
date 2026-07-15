@@ -15,6 +15,10 @@ import {
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type { LatLon, Priorities, StationInfo } from "@/lib/types";
 
+// See /api/plan/route.ts -- chains Overpass, planRoute()'s own OSRM/refine
+// work, and NS lookups, which can add up past Vercel's default timeout.
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   let body: {
     corridorId: string;

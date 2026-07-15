@@ -22,6 +22,11 @@ import {
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type { DestinationSuggestion, LatLon, Priorities } from "@/lib/types";
 
+// See /api/plan/route.ts -- chains Overpass (towns + area features +
+// tourism density), per-candidate Wikipedia lookups, OSRM preview routes,
+// and wind/NS calls, which can add up past Vercel's default timeout.
+export const maxDuration = 60;
+
 const NEARBY_STATION_THRESHOLD_M = 3000;
 const MAX_SUGGESTIONS = 4;
 // Tourism/historic density and Wikipedia lookups cost one Overpass query and

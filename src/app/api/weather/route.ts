@@ -7,6 +7,9 @@ import {
   representativeDaytimeWind,
 } from "@/lib/wind";
 
+// See /api/geocode/route.ts -- safety margin above Vercel's default timeout.
+export const maxDuration = 30;
+
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
   const locale = resolveLocale(params.get("locale"));

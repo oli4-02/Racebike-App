@@ -10,6 +10,12 @@ import {
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type { PlanRequest, RoundTripAlternative } from "@/lib/types";
 
+// See /api/plan/route.ts for why this is needed: 5 variants, each with its
+// own OSRM routing + refine-loop reroutes + wind evaluation, easily exceeds
+// Vercel's default serverless timeout, which otherwise kills the request
+// with no response body (shown to the rider as a bare "Load failed").
+export const maxDuration = 60;
+
 const ALTERNATIVE_COUNT = 5;
 
 const DIRECTION_LABEL_KEYS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as const;

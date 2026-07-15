@@ -1033,6 +1033,43 @@ alle Live-Aufrufe.
 Empfohlen: [Vercel](https://vercel.com/new). `NS_API_KEY` als Environment
 Variable im Vercel-Projekt hinterlegen, falls vorhanden.
 
+### `maxDuration`: Vercels Standard-Funktions-Timeout reicht nicht
+
+Ein Nutzer-Report nach dem letzten Deploy: Routenplanung endete nur noch mit
+einem knappen "Load failed" (Safaris generische Fetch-Fehlermeldung bei
+einem Netzwerkfehler) — kein Fehlertext von Meewind selbst, einfach nichts.
+Ursache: Ohne explizite Konfiguration killt Vercel eine Serverless Function
+nach seinem Standard-Timeout (10s), egal wie lange die eigentliche Anfrage
+noch gebraucht hätte. Eine Rundtour-Planung mit den 5 Varianten (Overpass-
+Pool/Feature-Fetch, pro Variante OSRM-Routing + bis zu 5 Refine-Durchläufe,
+plus Windauswertung) kann das inzwischen legitim überschreiten, besonders
+wenn ein Overpass-Mirror erst nach mehreren Sekunden antwortet. Killt Vercel
+die Funktion mitten in der Anfrage, bricht die Verbindung zum Browser ab,
+bevor überhaupt eine Antwort (auch keine Fehlerantwort mit Text) ankommt —
+der Browser zeigt dann nur seinen eigenen, nichtssagenden
+Netzwerkfehler-Text an, nicht die eigentlich vorhandene Fehlerbehandlung
+der App.
+
+Behoben mit `export const maxDuration = …;` (ein von Next.js/Vercel
+gelesenes Route-Segment-Flag) in jeder `route.ts`:
+- **60 Sekunden** für die Routen, die mehrere externe Aufrufe verketten:
+  `/api/plan`, `/api/plan-alternatives`, `/api/destinations`,
+  `/api/scenic-route`, `/api/signature-route`.
+- **30 Sekunden** für die übrigen Routen mit externen Aufrufen
+  (`/api/geocode`, `/api/weather`, `/api/train`, `/api/pois`,
+  `/api/road-types`, `/api/region-image`) — dort reicht in der Regel ein
+  einzelner externer Call, aber auch der sollte nicht am Standard-Timeout
+  scheitern.
+- `/api/scenic-corridors` und `/api/signature-routes` bleiben unverändert
+  (liefern nur statische, kuratierte Daten, kein externer Aufruf).
+
+60s liegt innerhalb des von Vercels kostenlosem Hobby-Tarif erlaubten
+Maximalwerts für `maxDuration` — sollte das Projekt auf einem höheren
+Tarif laufen, ließe sich der Wert weiter erhöhen, ist hier aber bewusst
+konservativ gehalten, da die eigentlichen Latenz-Fixes (siehe "Umgang mit
+Overpass-Überlastung" oben) das Ziel bleiben, nicht ein möglichst hohes
+Timeout.
+
 ## Nächste Schritte
 
 - Vollständiges Knooppunten-Netz (Relationen statt nur Knoten) für exaktere

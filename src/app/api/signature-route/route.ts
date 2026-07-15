@@ -8,6 +8,10 @@ import { distance } from "@/lib/geo";
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type { LatLon, Priorities, StationInfo } from "@/lib/types";
 
+// See /api/plan/route.ts -- chains NS lookups with planRoute()'s own
+// Overpass/OSRM/refine work, which can add up past Vercel's default timeout.
+export const maxDuration = 60;
+
 // Beyond this distance from the signature route's own region, riding there
 // directly stops being reasonable and an NS connection to the route's
 // nearest station is suggested instead; within it, the user just starts

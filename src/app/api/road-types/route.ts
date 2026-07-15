@@ -4,6 +4,9 @@ import { fetchRoadTypeBreakdown } from "@/lib/overpass";
 import { resolveLocale } from "@/lib/resolveLocale";
 import type { LatLon } from "@/lib/types";
 
+// See /api/geocode/route.ts -- safety margin above Vercel's default timeout.
+export const maxDuration = 30;
+
 export async function POST(req: NextRequest) {
   let body: { geometry: LatLon[]; locale?: string };
   try {

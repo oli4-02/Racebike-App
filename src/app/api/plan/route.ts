@@ -6,6 +6,16 @@ import { fetchWindForecast, isWithinForecastRange, representativeDaytimeWind } f
 import { DEFAULT_PRIORITIES } from "@/lib/types";
 import type { PlanRequest } from "@/lib/types";
 
+// Vercel's default serverless function limit (10s) is well under what a
+// route plan can take once you count the Overpass pool/feature fetch, the
+// OSRM routing + up to 5 refine-loop reroutes, and the wind evaluation's
+// own possible reroute -- without raising this, a genuinely slow plan gets
+// killed mid-request by the platform itself, which the browser then shows
+// as a bare network failure ("Load failed"/"Failed to fetch") with none of
+// this app's own, more helpful error messages, since the connection never
+// got a response body at all.
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   let body: PlanRequest;
   try {
