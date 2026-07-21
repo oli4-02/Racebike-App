@@ -1037,6 +1037,36 @@ Etappe Distanz/Zeit sowie die Turn-by-turn-Geometrie, aus der die
 Etappen-Geometrie fürs Rückenwind-Einfärben der Karte zusammengesetzt wird)
 — jetzt reicht ein Request pro Verfeinerungs-Durchlauf.
 
+### Root Cause für "immer Fehler, egal was ich suche": OSRM-Fair-Use-Limit gerissen
+
+Nach den Overpass-/`maxDuration`-Fixes oben meldete ein Nutzer, dass Routen
+jetzt *bei jedem* Versuch fehlschlagen, unabhängig von Startpunkt oder
+Distanz — kein Overpass-Timeout mehr (datenabhängig, gelegentlich), sondern
+ein strukturell reproduzierbarer Fehler. Ursache:
+`routing.openstreetmap.de`s öffentlicher Demo-Server erlaubt laut
+Nutzungsrichtlinie maximal **eine Anfrage pro Sekunde**.
+`planRoundTripAlternatives()` routet die 5 Rundtour-Varianten aber bewusst
+parallel (`ALTERNATIVE_CONCURRENCY = 5`, siehe oben "5 Routen-Varianten") —
+jede Variante schickt ihre eigene `routeChain()`-Anfrage, alle im selben
+Moment. Das ist keine gelegentliche Überlastung, sondern ein garantierter
+Verstoß gegen das dokumentierte Limit bei *jeder* Alternativen-Suche, dem
+Standard-Flow der App. Frühere, inzwischen entfernte Retry-Mechanismen
+(siehe "Umgang mit Overpass-Überlastung") haben das zufällig kaschiert,
+indem sie nach dem ersten Fehlschlag einfach erneut versuchten — daher die
+3+ Minuten Ladezeit statt eines klaren Fehlers.
+
+Behoben mit einer gemeinsamen Pacing-Gate in `src/lib/osrm.ts`
+(`throttledOsrmSlot()`): jeder OSRM-Aufruf, egal ob `routeLeg()` oder
+`routeChain()` und egal von welchem Aufrufer, wird über eine gemeinsame
+Warteschlange auf einen Mindestabstand von 1,1s zueinander serialisiert.
+Das kostet Zeit (5 Varianten × bis zu 6 Requests je Refine-Loop können sich
+so auf ~35–40s aufsummieren statt parallel in wenigen Sekunden zu laufen),
+passt aber innerhalb des 60s-`maxDuration`-Budgets und entspricht der
+expliziten Nutzer-Priorität "funktionieren hat Vorrang vor Geschwindigkeit".
+Ein Retry-Mechanismus hätte das eigentliche Problem (ein hartes, garantiertes
+Limit, keine transiente Überlastung) nicht behoben — nur tatsächliches
+Einhalten des Limits tut das zuverlässig.
+
 ### Hinweis zur Entwicklungsumgebung
 
 In manchen Sandbox-/CI-Umgebungen ist ausgehender Netzwerkzugriff auf

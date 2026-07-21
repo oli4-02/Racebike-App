@@ -16,6 +16,32 @@ const OSRM_HEADERS = {
     "racebike-app/0.1 (personal cycling route planner; https://github.com/oli4-02/Racebike-App)",
 };
 
+// routing.openstreetmap.de's fair-use policy caps this demo server at one
+// request per second -- planRoundTripAlternatives routes up to 5 variants
+// concurrently (each with its own initial route plus refine-loop reroutes),
+// which without this throttle fires several requests at the very same
+// instant on every single roundtrip-alternatives search, not just
+// occasionally. That's a hard violation of the documented limit, not a
+// transient overload, so no amount of retrying elsewhere fixes it -- only
+// serializing requests to actually stay under ~1/s does. This queues every
+// call (single-leg or full-chain, from any caller) through one shared
+// pacing gate.
+const MIN_REQUEST_INTERVAL_MS = 1100;
+let earliestNextRequestAt = 0;
+let throttleQueue: Promise<void> = Promise.resolve();
+
+function throttledOsrmSlot(): Promise<void> {
+  const slot = throttleQueue.then(async () => {
+    const waitMs = earliestNextRequestAt - Date.now();
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    earliestNextRequestAt = Date.now() + MIN_REQUEST_INTERVAL_MS;
+  });
+  // Swallow so one failed wait (can't actually happen here, but defensively)
+  // doesn't wedge the queue for every request queued after it.
+  throttleQueue = slot.catch(() => {});
+  return slot;
+}
+
 export type OsrmLeg = {
   distanceM: number;
   durationS: number;
@@ -27,6 +53,7 @@ export async function routeLeg(a: LatLon, b: LatLon, locale: AppLocale = routing
   const coords = `${a.lon},${a.lat};${b.lon},${b.lat}`;
   const url = `${OSRM_BASE}/${coords}?overview=full&geometries=geojson&steps=false`;
 
+  await throttledOsrmSlot();
   const res = await fetch(url, {
     headers: OSRM_HEADERS,
     signal: AbortSignal.timeout(20000),
@@ -73,6 +100,7 @@ export async function routeChain(points: LatLon[], locale: AppLocale = routing.d
   const coords = points.map((p) => `${p.lon},${p.lat}`).join(";");
   const url = `${OSRM_BASE}/${coords}?overview=false&geometries=geojson&steps=true`;
 
+  await throttledOsrmSlot();
   const res = await fetch(url, {
     headers: OSRM_HEADERS,
     signal: AbortSignal.timeout(30000),
