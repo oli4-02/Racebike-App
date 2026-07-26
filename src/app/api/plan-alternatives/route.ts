@@ -14,7 +14,13 @@ import type { PlanRequest, RoundTripAlternative } from "@/lib/types";
 // own OSRM routing + refine-loop reroutes + wind evaluation, easily exceeds
 // Vercel's default serverless timeout, which otherwise kills the request
 // with no response body (shown to the rider as a bare "Load failed").
-export const maxDuration = 60;
+// This is the heaviest endpoint in the app (5x the OSRM work of /api/plan),
+// so it gets the most headroom of the routes raised to use the Fluid
+// Compute ceiling (see /api/plan/route.ts) -- a production 504 with no
+// app-level error body was traced to this route's combined worst-case
+// latency (Overpass race + throttled OSRM calls, serialized across all 5
+// variants to respect OSRM's 1req/s limit) still occasionally exceeding 60s.
+export const maxDuration = 150;
 
 const ALTERNATIVE_COUNT = 5;
 

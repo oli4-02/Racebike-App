@@ -8,13 +8,19 @@ import type { PlanRequest } from "@/lib/types";
 
 // Vercel's default serverless function limit (10s) is well under what a
 // route plan can take once you count the Overpass pool/feature fetch, the
-// OSRM routing + up to 5 refine-loop reroutes, and the wind evaluation's
+// OSRM routing + up to 3 refine-loop reroutes, and the wind evaluation's
 // own possible reroute -- without raising this, a genuinely slow plan gets
 // killed mid-request by the platform itself, which the browser then shows
-// as a bare network failure ("Load failed"/"Failed to fetch") with none of
-// this app's own, more helpful error messages, since the connection never
-// got a response body at all.
-export const maxDuration = 60;
+// as a bare network failure ("Load failed"/"Failed to fetch"/a bodyless
+// 504) with none of this app's own, more helpful error messages, since the
+// connection never got a response body at all. 120s (up from an initial,
+// too-tight 60s) since this project has Fluid Compute enabled, which raises
+// Vercel's own ceiling to 300s -- confirmed after a 504 with no app-level
+// error body surfaced in production even after the Overpass/OSRM
+// reliability fixes below made the underlying calls themselves succeed;
+// their combined worst-case latency still occasionally exceeded the old 60s
+// budget.
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   let body: PlanRequest;

@@ -17,7 +17,10 @@ import type { LatLon, Priorities, StationInfo } from "@/lib/types";
 
 // See /api/plan/route.ts -- chains Overpass, planRoute()'s own OSRM/refine
 // work, and NS lookups, which can add up past Vercel's default timeout.
-export const maxDuration = 60;
+// Raised to 120 (Fluid Compute is enabled on this project, allowing up to
+// 300s -- see /api/plan/route.ts) after production 504s traced back to the
+// old 60s budget being too tight, not an app-level failure.
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   let body: {

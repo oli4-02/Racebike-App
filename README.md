@@ -1203,9 +1203,10 @@ der App.
 
 Behoben mit `export const maxDuration = …;` (ein von Next.js/Vercel
 gelesenes Route-Segment-Flag) in jeder `route.ts`:
-- **60 Sekunden** für die Routen, die mehrere externe Aufrufe verketten:
-  `/api/plan`, `/api/plan-alternatives`, `/api/destinations`,
-  `/api/scenic-route`, `/api/signature-route`.
+- **120-150 Sekunden** für die Routen, die mehrere externe Aufrufe
+  verketten: `/api/plan` (120), `/api/plan-alternatives` (150, als
+  aufwendigste Route mit 5× dem OSRM-Aufwand von `/api/plan`),
+  `/api/destinations`, `/api/scenic-route`, `/api/signature-route` (je 120).
 - **30 Sekunden** für die übrigen Routen mit externen Aufrufen
   (`/api/geocode`, `/api/weather`, `/api/train`, `/api/pois`,
   `/api/road-types`, `/api/region-image`) — dort reicht in der Regel ein
@@ -1214,12 +1215,34 @@ gelesenes Route-Segment-Flag) in jeder `route.ts`:
 - `/api/scenic-corridors` und `/api/signature-routes` bleiben unverändert
   (liefern nur statische, kuratierte Daten, kein externer Aufruf).
 
-60s liegt innerhalb des von Vercels kostenlosem Hobby-Tarif erlaubten
-Maximalwerts für `maxDuration` — sollte das Projekt auf einem höheren
-Tarif laufen, ließe sich der Wert weiter erhöhen, ist hier aber bewusst
-konservativ gehalten, da die eigentlichen Latenz-Fixes (siehe "Umgang mit
-Overpass-Überlastung" oben) das Ziel bleiben, nicht ein möglichst hohes
-Timeout.
+#### Nachtrag: 60s war zu knapp — Fluid Compute erlaubt mehr, und ist hier aktiv
+
+Trotz der Overpass-Racing- und OSRM-Throttling-Fixes oben (siehe "Root
+Cause für 'immer Fehler'" und die drei Nachträge zu `fetchAreaFeatures`)
+meldete ein Nutzer einen neuen Fehler: `Request failed (504)` — anders als
+alle bisherigen Fehlermeldungen **ohne** eigenen Meewind-Fehlertext. Das ist
+die generische Fallback-Meldung aus `parseOrThrow()` in `apiClient.ts`, die
+nur greift, wenn die Response gar kein `.error`-Feld enthält — ein Hinweis,
+dass hier keine unserer eigenen JSON-Fehlerantworten ankam, sondern Vercels
+eigene Plattform-Zeitüberschreitung die Funktion getötet hat, bevor sie
+antworten konnte. Mit anderen Worten: Die Overpass-/OSRM-Fixes hatten
+funktioniert (kein "Overpass request failed" mehr), aber die *kombinierte*
+Laufzeit aller Schritte zusammen (Overpass-Race + über alle 5
+Rundtour-Varianten gedrosselte OSRM-Aufrufe + Windauswertung) hat gelegentlich
+das bisherige `maxDuration`-Budget von 60s selbst überschritten.
+
+Ein Blick ins Vercel-Dashboard (Observability → Functions) bestätigte:
+**Fluid Compute ist für dieses Projekt aktiviert** — das erlaubt laut
+Vercel bis zu 300s `maxDuration` statt der 60s, die ohne Fluid Compute das
+Maximum auf dem Hobby-Tarif wären. Die bisherigen 60s waren also eine
+selbst auferlegte, zu knappe Grenze im eigenen Code, keine echte
+Plattformgrenze. Da die Nutzer-Priorität explizit "funktionieren geht vor
+Geschwindigkeit" lautet, wurden die `maxDuration`-Werte der
+Overpass/OSRM-lastigen Routen entsprechend angehoben (siehe Liste oben) —
+großzügig genug, um auch einen ungünstigen, aber nicht pathologischen Fall
+(mehrere Rundtour-Varianten brauchen alle mehrere Verfeinerungs-Durchläufe,
+plus ein langsamerer Overpass-Moment) sicher abzudecken, ohne bis an die
+volle 300s-Grenze zu gehen.
 
 ## Nächste Schritte
 

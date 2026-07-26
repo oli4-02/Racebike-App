@@ -24,8 +24,11 @@ import type { DestinationSuggestion, LatLon, Priorities } from "@/lib/types";
 
 // See /api/plan/route.ts -- chains Overpass (towns + area features +
 // tourism density), per-candidate Wikipedia lookups, OSRM preview routes,
-// and wind/NS calls, which can add up past Vercel's default timeout.
-export const maxDuration = 60;
+// and wind/NS calls, which can add up past Vercel's default timeout. Raised
+// to 120 (Fluid Compute is enabled on this project, allowing up to 300s --
+// see /api/plan/route.ts) after production 504s traced back to the old
+// 60s budget being too tight, not an app-level failure.
+export const maxDuration = 120;
 
 const NEARBY_STATION_THRESHOLD_M = 3000;
 const MAX_SUGGESTIONS = 4;
