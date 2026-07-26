@@ -651,6 +651,21 @@ async function avoidExcludedRoads(
   return { sequence, nodes, osrmLegs, totalDistanceM, totalDurationS };
 }
 
+// fetchAreaFeatures pulls several way/polygon clauses (water, wood, tourism,
+// historic, POIs) in one request -- their combined cost grows with the
+// *area* of the search circle, i.e. quadratically with radius, and users
+// kept seeing it time out (even after capping just its costliest clause,
+// landuse) at the larger radii long-distance roundtrips need for the
+// knooppunt pool (up to 70km). But computeFeatureScores only ever checks
+// each node's *own* small local radius (300-600m, see TRAFFIC_RADIUS_M etc.
+// above) against these features -- it never needs coverage all the way out
+// to 70km, so capping this fetch's radius well below the pool's doesn't
+// break scoring, it just means nodes past the cap get neutral/default
+// scores instead of nature/POI-biased ones. The knooppunt pool itself (a
+// single lightweight tag filter, not a multi-clause polygon query) keeps
+// using the full, uncapped searchRadius.
+const AREA_FEATURES_RADIUS_CAP_M = 35000;
+
 /** Fetches the shared knooppunt pool + area features once for a start point/search radius, reused by both planRoute and planRoundTripAlternatives. */
 async function fetchPoolAndFeatures(
   start: LatLon,
@@ -661,7 +676,7 @@ async function fetchPoolAndFeatures(
 ): Promise<{ pool: Knooppunt[]; featureScores: Map<number, NodeFeatureScores> }> {
   const [pool, areaFeatures] = await Promise.all([
     fetchKnooppunten(start, searchRadius, locale),
-    fetchAreaFeatures(start, searchRadius, true, poiCategories, locale),
+    fetchAreaFeatures(start, Math.min(searchRadius, AREA_FEATURES_RADIUS_CAP_M), true, poiCategories, locale),
   ]);
   if (pool.length < 3) {
     throw new Error(strings.tooFewNodes);

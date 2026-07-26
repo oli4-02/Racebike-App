@@ -1061,6 +1061,38 @@ OSRM-Fix oben eine weitere gedrosselte Anfrage über alle 5 Rundtour-
 Varianten hinweg, und die gedämpfte proportionale Korrektur konvergiert in
 der Praxis meist deutlich schneller als 5 Durchläufe.
 
+#### Nachtrag 2: das Landnutzungs-Cap allein reichte nicht — ganzer Abfrageradius gedeckelt
+
+Der nächste Nutzer-Test scheiterte immer noch, diesmal mit einer anderen
+Fehler-Signatur: **beide** Mirrors mit "The operation was aborted due to
+timeout" — das ist die clientseitige `AbortSignal.timeout`-Meldung, nicht
+Overpass' eigener 504. Der Server kam also nicht mal mehr dazu, selbst
+"zu komplex" zurückzumelden, bevor unser eigenes (großzügigeres) 23s-Limit
+ablief. Das zeigt: nicht nur die Landnutzungs-Klausel war zu teuer für
+einen Radius von bis zu 70km — Wasser, Wald, Sehenswürdigkeiten und POIs
+über eine so große Fläche summieren sich offenbar ebenfalls zu viel.
+
+Root Cause: `fetchAreaFeatures` bekam bisher denselben Suchradius wie die
+Knotenpunkte-Abfrage (`fetchKnooppunten`) — bei langen Rundtouren bis zu
+70km. Aber `fetchKnooppunten` ist nur ein einzelner, leichter Tag-Filter
+(ein Knotenpunkt-Netz-Tag), während `fetchAreaFeatures` mehrere Way-/
+Polygon-Klauseln kombiniert, deren Kosten mit der *Fläche* wachsen, also
+quadratisch mit dem Radius. Und `computeFeatureScores` in `routePlanner.ts`
+prüft für jeden Knotenpunkt ohnehin nur ein kleines lokales Umfeld
+(300-600m, siehe `TRAFFIC_RADIUS_M` & Co.) — die Abfrage muss also gar nicht
+bis zum vollen 70km-Radius reichen, um brauchbare Scores zu liefern.
+
+Jetzt entkoppelt: `fetchPoolAndFeatures` in `routePlanner.ts` deckelt den an
+`fetchAreaFeatures` übergebenen Radius auf 35km (`AREA_FEATURES_RADIUS_CAP_M`),
+unabhängig vom vollen, ungedeckelten Suchradius für die Knotenpunkte-Pool-
+Abfrage. Knotenpunkte weiter als 35km vom Start bekommen dadurch neutrale
+statt Natur-/POI-gewichtete Scores, statt dass die ganze Anfrage scheitert —
+ein klarer, bewusster Kompromiss zugunsten von Zuverlässigkeit, passend zur
+Nutzer-Priorität "funktionieren geht vor Feinschliff". Der bereits
+bestehende 20km-Deckel für die Landnutzungs-Klausel (siehe oben) bleibt
+zusätzlich bestehen und greift jetzt einfach innerhalb dieses kleineren
+35km-Radius.
+
 ### Performance: ein OSRM-Request statt vieler pro Route
 
 `routeChain()` in `src/lib/osrm.ts` schickte früher pro Etappe eine eigene,
