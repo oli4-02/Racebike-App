@@ -255,7 +255,11 @@ const DEFAULT_AREA_POI_CATEGORIES: POICategory[] = ["cafe", "ice_cream", "fuel",
 // geometry for them than for the sparser point-like traffic/water/POI tags.
 // Capping just this clause keeps the one clause whose cost scales worst with
 // radius bounded, while every other clause still covers the full radius.
-const AREA_FEATURES_URBAN_RADIUS_CAP_M = 20000;
+// Cut from an earlier 20km alongside routePlanner.ts's overall
+// AREA_FEATURES_RADIUS_CAP_M (see there for why: identical, deterministic
+// 504/timeout failures across both a request and its retry pointed at
+// "this query is too expensive here", not transient overload).
+const AREA_FEATURES_URBAN_RADIUS_CAP_M = 10000;
 // The combined query below is the single heaviest Overpass request in the
 // app (several way/polygon filters over a radius that can reach 35km after
 // the cap above); a user report of reliable 504s here traced back to the

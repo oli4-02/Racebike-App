@@ -1277,6 +1277,38 @@ Beschwerde führte). Mit dem neuen, deutlich größeren `maxDuration`-Budget
   bisher nur 30s `maxDuration`) auf 60s angehoben, da sie mit dem neuen,
   retry-fähigen Timeout sonst selbst zu knapp bemessen wären.
 
+#### Nachtrag 3: identischer Fehler zweimal hintereinander — das war kein Lastspitzen-Problem mehr
+
+Der Retry aus Nachtrag 2 lief wie vorgesehen, aber das Ergebnis war
+aufschlussreich: Der Fehlertext zeigte **denselben** Fehlschlag zweimal
+hintereinander (Erstversuch + Retry, 4s auseinander) — `overpass-api.de`
+beide Male mit demselben 504 "zu komplex", `kumi.systems` beide Male mit
+unserem eigenen Timeout. Eine echte, transiente Lastspitze hätte beim
+zweiten Versuch mit hoher Wahrscheinlichkeit ein anderes Ergebnis gezeigt
+(z. B. einer der beiden Mirrors antwortet plötzlich doch). Zwei identische
+Fehlschläge hintereinander sind stattdessen ein starkes Indiz für ein
+**deterministisches** Problem: diese eine Abfrage ist für diesen
+spezifischen Ort (Amsterdam/Schiphol-Ballungsraum, vermutlich eine der
+am dichtesten getaggten Regionen der Niederlande in OSM) selbst beim
+35km/20km-Radius-Cap noch zu teuer. Mehr Zeit oder mehr Versuche helfen
+gegen ein deterministisch zu teures Query nicht — nur eine tatsächlich
+günstigere Abfrage tut das.
+
+Zwei Änderungen:
+- Radius-Caps nochmal spürbar gesenkt: `AREA_FEATURES_RADIUS_CAP_M`
+  (`routePlanner.ts`) von 35km auf 20km, `AREA_FEATURES_URBAN_RADIUS_CAP_M`
+  (`overpass.ts`, die Landnutzungs-Klausel) von 20km auf 10km.
+- `fetchAreaFeatures` ist jetzt echtes Best-Effort statt eines harten
+  Fehlschlags: In `fetchPoolAndFeatures` (`routePlanner.ts`) wird der Aufruf
+  jetzt mit `.catch(() => EMPTY_AREA_FEATURES)` abgefangen. Diese Abfrage
+  liefert nur eine *Gewichtung* (Natur/POI/Stadt-Vermeidung) für die
+  Knotenpunkt-Auswahl — scheitert sie dauerhaft, kann die Route trotzdem mit
+  neutraler Gewichtung geplant werden, statt komplett zu scheitern. Die
+  Knotenpunkte-Pool-Abfrage (`fetchKnooppunten`) bleibt dagegen hart
+  scheiternd, da ohne sie schlicht keine Route buildbar ist. Das setzt die
+  Nutzer-Priorität "funktionieren geht vor Feinschliff" jetzt so direkt wie
+  möglich um: eine Route ohne Natur-Bias ist besser als gar keine Route.
+
 ## Nächste Schritte
 
 - Vollständiges Knooppunten-Netz (Relationen statt nur Knoten) für exaktere

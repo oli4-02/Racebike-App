@@ -664,7 +664,25 @@ async function avoidExcludedRoads(
 // scores instead of nature/POI-biased ones. The knooppunt pool itself (a
 // single lightweight tag filter, not a multi-clause polygon query) keeps
 // using the full, uncapped searchRadius.
-const AREA_FEATURES_RADIUS_CAP_M = 35000;
+// Cut from an earlier 35km after a production report showed the *exact
+// same* Overpass 504/timeout failure twice in a row, 4s apart (i.e. across
+// both the initial attempt and its retry, see overpass.ts's
+// runOverpassQuery) -- identical failures back-to-back point at a
+// deterministic "this query is too expensive for this specific area", not
+// a transient load spike a retry or a longer timeout could ride out. The
+// test location (Amsterdam/Schiphol metro) is plausibly one of the
+// densest-tagged regions in the Netherlands, so a radius that's fine
+// elsewhere can still be too much there.
+const AREA_FEATURES_RADIUS_CAP_M = 20000;
+
+const EMPTY_AREA_FEATURES: AreaFeatures = {
+  trafficPoints: [],
+  waterPoints: [],
+  greenPoints: [],
+  poiPoints: [],
+  attractionPoints: [],
+  urbanPoints: [],
+};
 
 /** Fetches the shared knooppunt pool + area features once for a start point/search radius, reused by both planRoute and planRoundTripAlternatives. */
 async function fetchPoolAndFeatures(
@@ -674,9 +692,20 @@ async function fetchPoolAndFeatures(
   locale: AppLocale,
   strings: (typeof ROUTE_PLANNER_STRINGS)[AppLocale]
 ): Promise<{ pool: Knooppunt[]; featureScores: Map<number, NodeFeatureScores> }> {
+  // fetchKnooppunten is load-bearing -- with no candidate nodes there's no
+  // route to build, so a failure there still has to fail the whole plan.
+  // fetchAreaFeatures only *biases* which nodes get picked (nature/POI/
+  // urban scoring); a repeated, deterministic Overpass failure on this one
+  // query (seen in production even after radius caps, longer timeouts, and
+  // a retry -- see AREA_FEATURES_RADIUS_CAP_M above) shouldn't take down a
+  // route that could otherwise plan fine with neutral scoring instead.
+  // Matches the user's explicit priority: succeeding without this bias beats
+  // not succeeding at all.
   const [pool, areaFeatures] = await Promise.all([
     fetchKnooppunten(start, searchRadius, locale),
-    fetchAreaFeatures(start, Math.min(searchRadius, AREA_FEATURES_RADIUS_CAP_M), true, poiCategories, locale),
+    fetchAreaFeatures(start, Math.min(searchRadius, AREA_FEATURES_RADIUS_CAP_M), true, poiCategories, locale).catch(
+      () => EMPTY_AREA_FEATURES
+    ),
   ]);
   if (pool.length < 3) {
     throw new Error(strings.tooFewNodes);
