@@ -100,18 +100,29 @@ export const OVERPASS_STRINGS: Record<
   },
 };
 
-export const OSRM_STRINGS: Record<AppLocale, { httpError: (status: number, statusText: string) => string; noRoute: (code: string) => string }> = {
+// Routing backend: OpenRouteService (api.openrouteservice.org), replacing
+// the public OSRM demo server (routing.openstreetmap.de) after its
+// documented 1-request/second fair-use limit caused repeated production
+// failures once roundtrip planning started routing several variants
+// concurrently. See routing.ts.
+export const ROUTING_STRINGS: Record<
+  AppLocale,
+  { apiKeyMissing: string; httpError: (status: number, message: string | null) => string }
+> = {
   de: {
-    httpError: (status, statusText) => `OSRM antwortete HTTP ${status} ${statusText}`,
-    noRoute: (code) => `OSRM konnte keine Route finden: ${code}`,
+    apiKeyMissing:
+      "Routenberechnung ist nicht konfiguriert: ORS_API_KEY fehlt. Kostenlosen Key auf openrouteservice.org registrieren und als Umgebungsvariable ORS_API_KEY setzen.",
+    httpError: (status, message) => `Routing-Dienst antwortete HTTP ${status}${message ? `: ${message}` : ""}`,
   },
   en: {
-    httpError: (status, statusText) => `OSRM responded HTTP ${status} ${statusText}`,
-    noRoute: (code) => `OSRM could not find a route: ${code}`,
+    apiKeyMissing:
+      "Route calculation isn't configured: ORS_API_KEY is missing. Register a free key at openrouteservice.org and set it as the ORS_API_KEY environment variable.",
+    httpError: (status, message) => `Routing service responded HTTP ${status}${message ? `: ${message}` : ""}`,
   },
   nl: {
-    httpError: (status, statusText) => `OSRM antwoordde met HTTP ${status} ${statusText}`,
-    noRoute: (code) => `OSRM kon geen route vinden: ${code}`,
+    apiKeyMissing:
+      "Routeberekening is niet geconfigureerd: ORS_API_KEY ontbreekt. Registreer een gratis key op openrouteservice.org en stel deze in als omgevingsvariabele ORS_API_KEY.",
+    httpError: (status, message) => `Routeringsdienst antwoordde HTTP ${status}${message ? `: ${message}` : ""}`,
   },
 };
 

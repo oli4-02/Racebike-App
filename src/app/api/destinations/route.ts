@@ -9,7 +9,7 @@ import {
   type TownCandidate,
 } from "@/lib/overpass";
 import { fetchWikipediaInfo, type WikipediaInfo } from "@/lib/wikipedia";
-import { routeLeg } from "@/lib/osrm";
+import { routeLeg } from "@/lib/routing";
 import { findNearestStation, isNsConfigured } from "@/lib/ns";
 import { resolveLocale } from "@/lib/resolveLocale";
 import { bearing, distance } from "@/lib/geo";

@@ -2,7 +2,7 @@ import type { AppLocale } from "@/i18n/routing";
 import { bearing, distance, angleDiff } from "./geo";
 import { ROUTE_PLANNER_STRINGS } from "./i18nStrings";
 import { fetchAreaFeatures, fetchKnooppunten, legCrossesExcludedRoad, type AreaFeatures } from "./overpass";
-import { routeChain, type OsrmLeg } from "./osrm";
+import { routeChain, type OsrmLeg } from "./routing";
 import { resolveLocale } from "./resolveLocale";
 import { evaluateWindDirection } from "./wind";
 import type {

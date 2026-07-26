@@ -937,12 +937,18 @@ Planer direkt. Sprache wechseln über `/de`/`/en`-Präfix (z. B.
 
 ### Umgebungsvariablen
 
-Kopiere `.env.example` zu `.env.local` und ergänze bei Bedarf:
+Kopiere `.env.example` zu `.env.local` und ergänze:
 
 ```
+ORS_API_KEY=
 NS_API_KEY=
 ```
 
+- **`ORS_API_KEY` (erforderlich)**: OpenRouteService-Key für die
+  Routenberechnung (`src/lib/routing.ts`) — siehe "Routing: OpenRouteService
+  statt öffentlichem OSRM-Demo-Server" weiter unten. Ohne diesen Key kann
+  keine einzige Route berechnet werden. Kostenlos registrieren auf
+  [openrouteservice.org](https://openrouteservice.org/dev/#/signup).
 - **Ohne `NS_API_KEY`**: Die App läuft normal, die Zugrückfahrt-Funktion
   zeigt einen Hinweis, dass der Key fehlt.
 - **Mit `NS_API_KEY`**: Kostenlos registrieren auf
@@ -952,7 +958,44 @@ NS_API_KEY=
   gebaut, aber noch nicht gegen einen echten Key getestet — bei Bedarf
   Endpunkte/Feldnamen dort verifizieren.
 
-Overpass, OSRM und Open-Meteo benötigen keine Keys.
+Overpass und Open-Meteo benötigen keine Keys.
+
+### Routing: OpenRouteService statt öffentlichem OSRM-Demo-Server
+
+`src/lib/routing.ts` (früher `osrm.ts`) berechnet Routen jetzt über
+[OpenRouteService](https://openrouteservice.org)s Directions-API
+(`cycling-regular`-Profil) statt über den öffentlichen OSRM-Demo-Server
+`routing.openstreetmap.de`. Grund: dessen dokumentiertes 1-Anfrage/Sekunde-
+Limit (siehe "Root Cause für 'immer Fehler'" oben) ließ sich mit
+clientseitigem Throttling zwar einhalten, aber nicht wirklich vergrößern —
+`planRoundTripAlternatives` routet bewusst 5 Varianten, und mehr Kapazität
+gab es auf dem geteilten, öffentlichen Server schlicht nicht zu holen.
+
+OpenRouteService ist ein verwalteter Dienst mit eigenem (deutlich
+großzügigerem) Rate-Limit, ohne dass wir selbst einen Server betreiben
+müssen — bewusste Entscheidung für "wenig Betriebsaufwand" statt Selbst-
+Hosten von Overpass/OSRM (siehe unten, "Bekannte Vereinfachungen" für die
+Abwägung). Kostenlose Stufe: üblicherweise einige tausend Anfragen/Tag,
+~40/Minute — ein eigener, auf dieses Limit abgestimmter Pacing-Mechanismus
+(analog zum alten OSRM-Throttle, siehe "Root Cause für 'immer Fehler'"
+oben) verhindert, dass ein einzelner 5-Varianten-Request das Limit
+sprengt. Erfordert einen `ORS_API_KEY` (siehe oben) — ohne diesen Key kann
+die App keine einzige Route berechnen, es gibt (bewusst) keinen Fallback.
+
+`routeLeg()`/`routeChain()` behalten dieselbe Signatur und denselben
+`OsrmLeg[]`-Rückgabetyp wie zuvor, sodass `routePlanner.ts` bis auf den
+Import-Pfad unverändert bleibt. Response-Format: ORS liefert bei
+`/geojson` bereits dekodierte Koordinaten (keine Polyline-Dekodierung
+nötig); die Pro-Etappen-Geometrie wird aus den `way_points`-Indexbereichen
+der `steps` jedes `segments`-Eintrags aus der gemeinsamen `LineString`
+herausgeschnitten — analog zum bisherigen OSRM-`steps`-Ansatz.
+
+**Nicht live getestet**: Wie bei allen Overpass-/OSRM-Integrationen in
+diesem Projekt hat diese Sandbox keinen Netzwerkzugriff auf externe APIs
+(auch nicht auf `api.openrouteservice.org`), daher konnte dieser Umbau nur
+anhand der dokumentierten ORS-API-Struktur implementiert werden, nicht
+gegen echte Responses verifiziert werden. Nach dem ersten Deploy mit
+gesetztem `ORS_API_KEY` unbedingt live testen.
 
 ### Umgang mit Overpass-Überlastung (429/502/503/504)
 
