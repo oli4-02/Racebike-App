@@ -58,16 +58,19 @@ function elementPoint(el: OverpassElement): LatLon | null {
 // if every mirror still failed, waited and retried the whole list again --
 // meant to ride out brief load spikes, but a report of route planning
 // taking 3+ minutes traced straight back to this: with a 30s per-request
-// timeout, 3 endpoints, up to 2 attempts each, and a second full round, a
-// genuinely slow moment (requests hanging near the timeout rather than
-// failing fast) could add up to several minutes before ever reaching the
-// rider. The per-query `[timeout:…]` budgets below were also cut to 15s
-// (from 20-30s) so Overpass itself gives up and returns a fast, clean error
-// instead of us waiting the old, longer budgets out; this client-side abort
-// is set a few seconds above that as a safety net for a hung connection
-// that never even reaches Overpass's own timeout, not as the primary
-// cutoff.
-const REQUEST_TIMEOUT_MS = 18000;
+// timeout, 3 endpoints tried *sequentially*, up to 2 attempts each, and a
+// second full round, a genuinely slow moment could add up to several
+// minutes. That budget was set back when every API route had to fit inside
+// Vercel's default 60s ceiling; now that Fluid Compute is confirmed enabled
+// (see /api/plan/route.ts) and those routes run with 120-150s of budget,
+// there's room to be considerably more patient again -- this timeout was
+// raised from an earlier, tighter 18s now that a single retry (below) can
+// afford to wait this long twice.
+const REQUEST_TIMEOUT_MS = 25000;
+// [timeout:…] inside each query template below matches this, a few seconds
+// under the client abort so Overpass itself gives up and returns a clean
+// error before our own connection gives up on it.
+const DEFAULT_QUERY_TIMEOUT_S = 22;
 
 /** Overpass error pages are full HTML documents; showing that raw is just noise for users. */
 function summarizeErrorBody(status: number, statusText: string, body: string, locale: AppLocale): string {
@@ -117,24 +120,48 @@ async function attemptOverpassEndpoint(
 // tried), while a single healthy mirror answering quickly still wins
 // immediately -- strictly more resilient for the same worst-case latency
 // budget, not a trade-off between them.
+async function raceOverpassMirrors(
+  query: string,
+  timeoutMs: number,
+  locale: AppLocale
+): Promise<OverpassResponse> {
+  return Promise.any(OVERPASS_ENDPOINTS.map((endpoint) => attemptOverpassEndpoint(endpoint, query, timeoutMs, locale)));
+}
+
+function aggregateErrorMessages(err: unknown): string[] {
+  if (err instanceof AggregateError) return err.errors.map((e) => (e instanceof Error ? e.message : String(e)));
+  return [err instanceof Error ? err.message : String(err)];
+}
+
+// A single retry, not the old multi-round/multi-attempt-per-mirror design
+// that caused the 3+ minute report -- both mirrors failing at once could
+// mean genuinely overloaded public infrastructure at that exact moment
+// (seen in production even after switching to racing above), and a short
+// pause before trying both again once more gives that a real chance to
+// clear, rather than a permanent failure on a transient blip. This is
+// affordable now that the heavy routes run with 120-150s of maxDuration
+// budget (Fluid Compute is enabled, see /api/plan/route.ts) instead of the
+// 60s it used to be squeezed into.
+const RETRY_DELAY_MS = 4000;
+
 async function runOverpassQuery(
   query: string,
   locale: AppLocale = routing.defaultLocale,
   timeoutMs: number = REQUEST_TIMEOUT_MS
 ): Promise<OverpassResponse> {
   try {
-    return await Promise.any(
-      OVERPASS_ENDPOINTS.map((endpoint) => attemptOverpassEndpoint(endpoint, query, timeoutMs, locale))
-    );
-  } catch (err) {
-    const messages =
-      err instanceof AggregateError
-        ? err.errors.map((e) => (e instanceof Error ? e.message : String(e)))
-        : [err instanceof Error ? err.message : String(err)];
-    const sawOverloadSignal = messages.some((m) => /HTTP (429|502|503|504)/.test(m));
-    const strings = OVERPASS_STRINGS[locale];
-    const hint = sawOverloadSignal ? strings.overloadHint : "";
-    throw new Error(`${strings.allServersFailed}\n${messages.join("\n")}${hint}`);
+    return await raceOverpassMirrors(query, timeoutMs, locale);
+  } catch (firstErr) {
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    try {
+      return await raceOverpassMirrors(query, timeoutMs, locale);
+    } catch (secondErr) {
+      const messages = [...aggregateErrorMessages(firstErr), ...aggregateErrorMessages(secondErr)];
+      const sawOverloadSignal = messages.some((m) => /HTTP (429|502|503|504)/.test(m));
+      const strings = OVERPASS_STRINGS[locale];
+      const hint = sawOverloadSignal ? strings.overloadHint : "";
+      throw new Error(`${strings.allServersFailed}\n${messages.join("\n")}${hint}`);
+    }
   }
 }
 
@@ -144,7 +171,7 @@ export async function fetchKnooppunten(
   radiusM: number,
   locale: AppLocale = routing.defaultLocale
 ): Promise<Knooppunt[]> {
-  const query = `[out:json][timeout:15];
+  const query = `[out:json][timeout:${DEFAULT_QUERY_TIMEOUT_S}];
 node["rcn_ref"](around:${radiusM},${center.lat},${center.lon});
 out body;`;
 
@@ -186,7 +213,7 @@ export async function fetchPOIsNearRoute(
     .map((f) => `  ${f}(around:${corridorM},${aroundArg});`)
     .join("\n");
 
-  const query = `[out:json][timeout:15];
+  const query = `[out:json][timeout:${DEFAULT_QUERY_TIMEOUT_S}];
 (
 ${clauses}
 );
@@ -230,17 +257,19 @@ const DEFAULT_AREA_POI_CATEGORIES: POICategory[] = ["cafe", "ice_cream", "fuel",
 // radius bounded, while every other clause still covers the full radius.
 const AREA_FEATURES_URBAN_RADIUS_CAP_M = 20000;
 // The combined query below is the single heaviest Overpass request in the
-// app (several way/polygon filters over a radius that can reach 70km); a
-// user report of reliable 504s here traced back to the 15s budget the
-// latency fixes elsewhere cut every query down to, which isn't enough for
-// this one specifically. Timeout tuning alone can't fix a query that's
-// genuinely too complex, which is why the urban-radius cap above comes
-// first -- this only needs to cover what's left after that, and is kept
-// modest (not e.g. 30s) since this query runs before any OSRM work in
-// /api/plan-alternatives, and both have to fit inside the same 60s
-// maxDuration (see /api/plan/route.ts).
-const AREA_FEATURES_TIMEOUT_S = 20;
-const AREA_FEATURES_REQUEST_TIMEOUT_MS = 23000;
+// app (several way/polygon filters over a radius that can reach 35km after
+// the cap above); a user report of reliable 504s here traced back to the
+// 15s budget the latency fixes elsewhere cut every query down to, which
+// wasn't enough for this one specifically. Timeout tuning alone can't fix a
+// query that's genuinely too complex, which is why the urban-radius cap
+// above comes first -- this just needs to cover what's left after that.
+// Raised again (was 20s/23s) now that this query's callers (/api/plan,
+// /api/plan-alternatives) run with 120-150s of maxDuration instead of 60s
+// (Fluid Compute is enabled, see /api/plan/route.ts), leaving real room to
+// let a genuinely slow-but-not-dead response actually finish, plus this
+// same query now gets one retry (see runOverpassQuery's RETRY_DELAY_MS).
+const AREA_FEATURES_TIMEOUT_S = 35;
+const AREA_FEATURES_REQUEST_TIMEOUT_MS = 38000;
 
 /**
  * Single combined query for the criteria that bias knooppunt selection:
@@ -367,7 +396,7 @@ export async function fetchTourismHistoricPoints(
     ];
   });
 
-  const query = `[out:json][timeout:15];
+  const query = `[out:json][timeout:${DEFAULT_QUERY_TIMEOUT_S}];
 (
 ${clauses.map((c) => "  " + c).join("\n")}
 );
@@ -392,7 +421,7 @@ export async function fetchTowns(
   radiusM: number,
   locale: AppLocale = routing.defaultLocale
 ): Promise<TownCandidate[]> {
-  const query = `[out:json][timeout:15];
+  const query = `[out:json][timeout:${DEFAULT_QUERY_TIMEOUT_S}];
 node["place"~"^(city|town|village)$"](around:${radiusM},${center.lat},${center.lon});
 out center;`;
 
@@ -469,7 +498,7 @@ export async function fetchRoadTypeBreakdown(
   const sampled = sampleIndices.map((i) => route[i]);
   const aroundArg = sampled.map((p) => `${p.lat},${p.lon}`).join(",");
 
-  const query = `[out:json][timeout:15];
+  const query = `[out:json][timeout:${DEFAULT_QUERY_TIMEOUT_S}];
 way["highway"](around:${ROAD_TYPE_CORRIDOR_M},${aroundArg});
 out geom;`;
 
@@ -584,7 +613,7 @@ export async function legCrossesExcludedRoad(
   const aroundArg = sampled.map((p) => `${p.lat},${p.lon}`).join(",");
 
   const highwayPattern = `^(${EXCLUDED_HIGHWAY_CLASSES.join("|")})$`;
-  const query = `[out:json][timeout:15];
+  const query = `[out:json][timeout:${DEFAULT_QUERY_TIMEOUT_S}];
 way["highway"~"${highwayPattern}"](around:${EXCLUDED_ROAD_CORRIDOR_M},${aroundArg});
 out ids 1;`;
 

@@ -1244,6 +1244,39 @@ großzügig genug, um auch einen ungünstigen, aber nicht pathologischen Fall
 plus ein langsamerer Overpass-Moment) sicher abzudecken, ohne bis an die
 volle 300s-Grenze zu gehen.
 
+#### Nachtrag 2: mit dem neuen Zeitbudget lohnt sich jetzt auch ein Retry
+
+Trotz aller oben genannten Fixes (Racing, Radius-Caps, höheres
+`maxDuration`) scheiterte ein weiterer Test weiterhin an genau derselben
+Overpass-Anfrage — beide Mirrors gleichzeitig, einer mit einem echten 504
+("zu komplex/überlastet"), der andere am eigenen Client-Timeout. Racing
+löst das Problem "ein hängender Mirror blockiert den anderen", aber wenn
+das öffentliche Overpass-Netzwerk in diesem Moment tatsächlich überall
+gerade überlastet ist (beide unabhängigen Betreiber gleichzeitig), hilft
+Racing allein nicht mehr — dann bräuchte es entweder mehr Zeit pro Versuch
+oder einen zweiten Versuch nach einer kurzen Pause.
+
+Beides war mit dem alten 60s-Budget bewusst zu teuer (siehe "Root Cause für
+'immer Fehler'" oben — das war exakt der Fehler, der zur 3-Minuten-
+Beschwerde führte). Mit dem neuen, deutlich größeren `maxDuration`-Budget
+(120-150s, siehe Nachtrag oben) ist dafür jetzt aber Platz:
+
+- `REQUEST_TIMEOUT_MS` in `src/lib/overpass.ts` von 18s auf 25s angehoben,
+  die `[timeout:…]`-Werte in den Query-Templates einheitlich von 15s auf
+  22s (`DEFAULT_QUERY_TIMEOUT_S`).
+- `fetchAreaFeatures`s eigenes, noch großzügigeres Timeout-Budget (die
+  teuerste Abfrage) nochmal angehoben, von 20s/23s auf 35s/38s.
+- `runOverpassQuery` versucht bei einem kompletten Fehlschlag (alle Mirrors
+  gescheitert) nach einer kurzen Pause (4s) **genau ein einziges Mal**
+  erneut, statt endgültig aufzugeben. Das ist bewusst kein Rückfall in das
+  alte Multi-Runden-/Multi-Versuch-pro-Mirror-Design, das die 3-Minuten-
+  Beschwerde verursacht hatte — nur ein einziger zusätzlicher Racing-
+  Durchlauf, der einer kurzlebigen, echten Überlastung eine zweite Chance
+  gibt, bevor der Nutzer einen Fehler sieht.
+- `/api/pois` und `/api/road-types` (rufen ebenfalls Overpass auf, aber mit
+  bisher nur 30s `maxDuration`) auf 60s angehoben, da sie mit dem neuen,
+  retry-fähigen Timeout sonst selbst zu knapp bemessen wären.
+
 ## Nächste Schritte
 
 - Vollständiges Knooppunten-Netz (Relationen statt nur Knoten) für exaktere
