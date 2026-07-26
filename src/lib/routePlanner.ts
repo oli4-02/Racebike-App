@@ -373,7 +373,15 @@ const TOLERANCE = 0.08; // accept +/-8% of target distance -- tightened from +/-
 // for TOLERANCE first, this only decides what's still acceptable to return
 // once iterations run out.
 const FALLBACK_TOLERANCE = 0.2;
-const MAX_REFINE_ITERATIONS = 5;
+// Each iteration here costs one more throttled OSRM request (see osrm.ts's
+// 1.1s pacing gate, added after concurrent roundtrip variants were found to
+// violate OSRM's public 1req/s fair-use limit) -- across up to 5 concurrent
+// alternatives, that's 5x per iteration. Kept at 3 rather than higher so
+// this loop's worst case still leaves headroom for the Overpass area-feature
+// fetch that already runs before it, within the shared 60s Vercel
+// maxDuration budget; the damped proportional correction (below) converges
+// fast enough in practice that this rarely costs real accuracy.
+const MAX_REFINE_ITERATIONS = 3;
 // Correcting the full measured overshoot/undershoot in one shot tends to
 // overcorrect (drop too many nodes, then need to add most of them back next
 // iteration) -- damping each pass to 70% of the measured gap still lands far

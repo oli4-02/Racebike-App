@@ -94,7 +94,11 @@ function summarizeErrorBody(status: number, statusText: string, body: string, lo
  * fast, clear failure is better for the rider than a slow one, even if it's
  * occasionally less likely to ride out a load spike.
  */
-async function runOverpassQuery(query: string, locale: AppLocale = routing.defaultLocale): Promise<OverpassResponse> {
+async function runOverpassQuery(
+  query: string,
+  locale: AppLocale = routing.defaultLocale,
+  timeoutMs: number = REQUEST_TIMEOUT_MS
+): Promise<OverpassResponse> {
   const attempts: string[] = [];
   let sawOverloadSignal = false;
 
@@ -104,7 +108,7 @@ async function runOverpassQuery(query: string, locale: AppLocale = routing.defau
         method: "POST",
         headers: OVERPASS_HEADERS,
         body: "data=" + encodeURIComponent(query),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (!res.ok) {
         sawOverloadSignal = true;
@@ -203,6 +207,30 @@ export type AreaFeatures = {
 
 const DEFAULT_AREA_POI_CATEGORIES: POICategory[] = ["cafe", "ice_cream", "fuel", "supermarket"];
 
+// routePlanner's computeFeatureScores only ever checks a node's urbanScore
+// within URBAN_RADIUS_M (600m) of that specific node -- so fetching
+// residential/commercial/industrial/retail landuse polygons across the
+// *entire* search radius (up to 70km for roundtrip planning) buys no extra
+// scoring accuracy proportional to its cost. Landuse polygons are also, by a
+// wide margin, the most expensive clause here: they cover a large fraction
+// of any populated area's surface, so Overpass has to evaluate vastly more
+// geometry for them than for the sparser point-like traffic/water/POI tags.
+// Capping just this clause keeps the one clause whose cost scales worst with
+// radius bounded, while every other clause still covers the full radius.
+const AREA_FEATURES_URBAN_RADIUS_CAP_M = 20000;
+// The combined query below is the single heaviest Overpass request in the
+// app (several way/polygon filters over a radius that can reach 70km); a
+// user report of reliable 504s here traced back to the 15s budget the
+// latency fixes elsewhere cut every query down to, which isn't enough for
+// this one specifically. Timeout tuning alone can't fix a query that's
+// genuinely too complex, which is why the urban-radius cap above comes
+// first -- this only needs to cover what's left after that, and is kept
+// modest (not e.g. 30s) since this query runs before any OSRM work in
+// /api/plan-alternatives, and both have to fit inside the same 60s
+// maxDuration (see /api/plan/route.ts).
+const AREA_FEATURES_TIMEOUT_S = 20;
+const AREA_FEATURES_REQUEST_TIMEOUT_MS = 23000;
+
 /**
  * Single combined query for the criteria that bias knooppunt selection:
  * traffic signals/crossings (fewer nearby = better), water and green space
@@ -226,6 +254,7 @@ export async function fetchAreaFeatures(
   locale: AppLocale = routing.defaultLocale
 ): Promise<AreaFeatures> {
   const around = `around:${radiusM},${center.lat},${center.lon}`;
+  const urbanAround = `around:${Math.min(radiusM, AREA_FEATURES_URBAN_RADIUS_CAP_M)},${center.lat},${center.lon}`;
   const attractionClauses = includeAttractions
     ? `
   node["tourism"](${around});
@@ -238,7 +267,7 @@ export async function fetchAreaFeatures(
     .flatMap((cat) => POI_FILTERS[cat])
     .map((f) => `  ${f}(${around});`)
     .join("\n");
-  const query = `[out:json][timeout:15];
+  const query = `[out:json][timeout:${AREA_FEATURES_TIMEOUT_S}];
 (
   node["highway"~"^(traffic_signals|crossing)$"](${around});
   node["natural"="water"](${around});
@@ -246,12 +275,12 @@ export async function fetchAreaFeatures(
   way["waterway"](${around});
   way["natural"="wood"](${around});
   way["landuse"~"^(forest|wood)$"](${around});
-  way["landuse"~"^(residential|commercial|industrial|retail)$"](${around});
+  way["landuse"~"^(residential|commercial|industrial|retail)$"](${urbanAround});
 ${poiClauses}${attractionClauses}
 );
 out center;`;
 
-  const data = await runOverpassQuery(query, locale);
+  const data = await runOverpassQuery(query, locale, AREA_FEATURES_REQUEST_TIMEOUT_MS);
   const elements = data.elements ?? [];
 
   const features: AreaFeatures = {

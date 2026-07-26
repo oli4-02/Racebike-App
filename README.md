@@ -1024,6 +1024,43 @@ dass jede Anfrage bei Überlastung trotzdem noch durchkommt — das war exakt
 der Trade-off, den der vorherige, länger wartende Ansatz falsch getroffen
 hatte.
 
+#### Nachtrag: die 15s waren für `fetchAreaFeatures` selbst zu knapp
+
+Nach dem Umbau oben meldete ein Nutzer weiterhin zuverlässige Fehler — ein
+Screenshot zeigte `overpass-api.de` mit HTTP 504 ("too complex or
+overloaded") und `overpass.kumi.systems` mit unserem eigenen 18s-Client-
+Abbruch, beide am selben, einzelnen `fetchAreaFeatures`-Aufruf. Anders als
+das OSRM-Problem oben ist das kein Nebeneffekt von Parallelität, sondern:
+diese eine kombinierte Abfrage (Ampeln/Wasser/Wald/Landnutzung/POIs/
+Sehenswürdigkeiten in einem `around:radius`-Filter, der bei Rundtouren bis
+zu 70km betragen kann) ist für ihre eigene 15s zu teuer geworden, seit die
+Latenz-Fixes oben sie von 20-30s heruntergesetzt haben. Landnutzungs-
+Polygone (`residential|commercial|industrial|retail`) sind dabei mit
+Abstand die teuerste Teilklausel — sie decken einen großen Teil jeder
+besiedelten Fläche ab, und ihre Kosten wachsen quadratisch mit dem Radius.
+
+Behoben mit zwei Änderungen in `src/lib/overpass.ts`:
+- Die Landnutzungs-Klausel bekommt einen eigenen, auf 20km gedeckelten
+  Radius statt des vollen (bis zu 70km) Suchradius — `computeFeatureScores`
+  in `routePlanner.ts` prüft `urbanScore` ohnehin nur innerhalb von 600m um
+  jeden einzelnen Knotenpunkt, ein größerer Abfrageradius für diese Klausel
+  liefert also keine zusätzliche Scoring-Genauigkeit, die die quadratisch
+  wachsenden Kosten rechtfertigen würde. Alle anderen Klauseln (Wasser,
+  Wald, POIs, Sehenswürdigkeiten) behalten den vollen Radius.
+- `fetchAreaFeatures` bekommt ein eigenes, höheres Timeout-Budget (20s
+  serverseitig, 23s clientseitig) statt der allgemeinen 15s/18s — als
+  einzige Abfrage mit mehreren Way-/Polygon-Klauseln über einen so großen
+  Radius ist sie deutlich teurer als die übrigen (Knotenpunkte, POIs an der
+  Route, Orte), die bei 15s/18s bleiben.
+
+Da diese Abfrage in `/api/plan-alternatives` läuft, bevor überhaupt ein
+OSRM-Request losgeht, und beide sich das `maxDuration`-Budget von 60s teilen
+müssen (siehe unten), wurde zusätzlich `MAX_REFINE_ITERATIONS` in
+`routePlanner.ts` von 5 auf 3 gesenkt — jede Iteration kostet nach dem
+OSRM-Fix oben eine weitere gedrosselte Anfrage über alle 5 Rundtour-
+Varianten hinweg, und die gedämpfte proportionale Korrektur konvergiert in
+der Praxis meist deutlich schneller als 5 Durchläufe.
+
 ### Performance: ein OSRM-Request statt vieler pro Route
 
 `routeChain()` in `src/lib/osrm.ts` schickte früher pro Etappe eine eigene,
