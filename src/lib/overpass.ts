@@ -3,19 +3,16 @@ import { distance } from "./geo";
 import { OVERPASS_STRINGS, POI_CATEGORY_LABELS } from "./i18nStrings";
 import type { Knooppunt, LatLon, POI, POICategory, RoadTypeBreakdown, RoadTypeResult, RoadTypeSegment } from "./types";
 
-// Deliberately just two mirrors, not three: overpass-api.de and its lz4
-// load-balanced frontend are the same operator's infrastructure -- under
-// real load they can both be rate-limited/overloaded at once (a 429 on one
-// right after a 504 on the other, rather than genuine independent
-// capacity), so keeping both in the fallback chain buys little real
-// resilience while still costing a full timeout's worth of latency. Kumi
-// Systems runs a separately operated public mirror and is worth trying
-// instead; the whole app also has to fit within Vercel's serverless
-// function time limit (see /api/plan/route.ts's maxDuration), and every
-// mirror in this list is a full REQUEST_TIMEOUT_MS-sized slice of that
-// budget in the worst case -- fewer, more genuinely independent mirrors
-// leaves more of that budget for the OSRM/refine work that has to happen
-// afterward.
+// Two genuinely independent public mirrors -- overpass-api.de's own lz4
+// load-balanced frontend was deliberately left out (same operator's
+// infrastructure, so it can be overloaded at the exact same moment as the
+// main one); Kumi Systems is a separately operated instance. Since
+// runOverpassQuery below races every endpoint concurrently instead of
+// trying them one after another, adding a mirror here no longer costs an
+// extra sequential timeout slice in the worst case -- worst case stays
+// bounded by a single timeoutMs regardless of list length, so this list
+// could grow if another genuinely independent public instance turns out to
+// be worth adding.
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
@@ -64,14 +61,12 @@ function elementPoint(el: OverpassElement): LatLon | null {
 // timeout, 3 endpoints, up to 2 attempts each, and a second full round, a
 // genuinely slow moment (requests hanging near the timeout rather than
 // failing fast) could add up to several minutes before ever reaching the
-// rider. Moving to a different, independently-run mirror immediately on any
-// failure is both simpler and faster than waiting out a struggling one --
-// that's what the Kumi Systems mirror above is for. The per-query `[timeout:…]`
-// budgets below were also cut to 15s (from 20-30s) so Overpass itself gives
-// up and returns a fast, clean error instead of us waiting the old, longer
-// budgets out; this client-side abort is set a few seconds above that as a
-// safety net for a hung connection that never even reaches Overpass's own
-// timeout, not as the primary cutoff.
+// rider. The per-query `[timeout:…]` budgets below were also cut to 15s
+// (from 20-30s) so Overpass itself gives up and returns a fast, clean error
+// instead of us waiting the old, longer budgets out; this client-side abort
+// is set a few seconds above that as a safety net for a hung connection
+// that never even reaches Overpass's own timeout, not as the primary
+// cutoff.
 const REQUEST_TIMEOUT_MS = 18000;
 
 /** Overpass error pages are full HTML documents; showing that raw is just noise for users. */
@@ -86,45 +81,61 @@ function summarizeErrorBody(status: number, statusText: string, body: string, lo
   return `HTTP ${status} ${statusText}${reasons[status] ? ` (${reasons[status]})` : ""}`;
 }
 
-/**
- * Tries each mirror once, in order, moving on immediately on any failure
- * (rate limit, overload, timeout, network error alike) -- worst case is
- * bounded at roughly OVERPASS_ENDPOINTS.length * REQUEST_TIMEOUT_MS instead
- * of the open-ended multi-round/multi-attempt retries this used to do. A
- * fast, clear failure is better for the rider than a slow one, even if it's
- * occasionally less likely to ride out a load spike.
- */
+async function attemptOverpassEndpoint(
+  endpoint: string,
+  query: string,
+  timeoutMs: number,
+  locale: AppLocale
+): Promise<OverpassResponse> {
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: OVERPASS_HEADERS,
+      body: "data=" + encodeURIComponent(query),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      throw new Error(summarizeErrorBody(res.status, res.statusText, bodyText, locale));
+    }
+    return await res.json();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`${endpoint} -> ${message}`);
+  }
+}
+
+// Trying mirrors one after another means a currently-slow mirror burns its
+// whole timeout slot before the next one even starts -- three consecutive
+// real-world reports of "both mirrors timed out" with substantially
+// different query costs/radii each time (a fix meant to help never changed
+// the outcome) pointed at this sequential design itself as the problem, not
+// query cost: whichever mirror happened to be struggling at that moment
+// blocked the other, healthier one from ever getting a chance in time.
+// Racing every mirror at once instead means only the *slowest* attempt sets
+// the worst case (bounded by timeoutMs regardless of how many mirrors are
+// tried), while a single healthy mirror answering quickly still wins
+// immediately -- strictly more resilient for the same worst-case latency
+// budget, not a trade-off between them.
 async function runOverpassQuery(
   query: string,
   locale: AppLocale = routing.defaultLocale,
   timeoutMs: number = REQUEST_TIMEOUT_MS
 ): Promise<OverpassResponse> {
-  const attempts: string[] = [];
-  let sawOverloadSignal = false;
-
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: OVERPASS_HEADERS,
-        body: "data=" + encodeURIComponent(query),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (!res.ok) {
-        sawOverloadSignal = true;
-        const bodyText = await res.text().catch(() => "");
-        attempts.push(`${endpoint} -> ${summarizeErrorBody(res.status, res.statusText, bodyText, locale)}`);
-        continue;
-      }
-      return await res.json();
-    } catch (err) {
-      attempts.push(`${endpoint} -> ${err instanceof Error ? err.message : String(err)}`);
-    }
+  try {
+    return await Promise.any(
+      OVERPASS_ENDPOINTS.map((endpoint) => attemptOverpassEndpoint(endpoint, query, timeoutMs, locale))
+    );
+  } catch (err) {
+    const messages =
+      err instanceof AggregateError
+        ? err.errors.map((e) => (e instanceof Error ? e.message : String(e)))
+        : [err instanceof Error ? err.message : String(err)];
+    const sawOverloadSignal = messages.some((m) => /HTTP (429|502|503|504)/.test(m));
+    const strings = OVERPASS_STRINGS[locale];
+    const hint = sawOverloadSignal ? strings.overloadHint : "";
+    throw new Error(`${strings.allServersFailed}\n${messages.join("\n")}${hint}`);
   }
-
-  const strings = OVERPASS_STRINGS[locale];
-  const hint = sawOverloadSignal ? strings.overloadHint : "";
-  throw new Error(`${strings.allServersFailed}\n${attempts.join("\n")}${hint}`);
 }
 
 /** Fetches Dutch cycle node-network points (rcn_ref) within radiusM of center. */

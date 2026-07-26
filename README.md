@@ -1093,6 +1093,41 @@ bestehende 20km-Deckel für die Landnutzungs-Klausel (siehe oben) bleibt
 zusätzlich bestehen und greift jetzt einfach innerhalb dieses kleineren
 35km-Radius.
 
+#### Nachtrag 3: sequenzielles Mirror-Probieren war selbst das Problem — jetzt Race statt Reihenfolge
+
+Ein dritter Test scheiterte mit exakt demselben Fehlertext wie die zwei
+vorherigen — "aborted due to timeout" auf beiden Mirrors — obwohl die
+Query-Kosten für `fetchAreaFeatures` inzwischen deutlich gesenkt waren
+(Landnutzungs-Radius auf 20km, Gesamtradius auf 35km gedeckelt). Drei
+Fixes mit spürbar unterschiedlicher Query-Last, aber identisches Ergebnis
+jedes Mal — das passt nicht zu "die Query war zu teuer". Ein Blick ins
+Vercel-Dashboard bestätigte außerdem: Es wurde tatsächlich jedes Mal der
+neueste Commit deployt, kein Stale-Deployment-Problem.
+
+Root Cause lag stattdessen im Design von `runOverpassQuery` selbst:
+`overpass-api.de` und `overpass.kumi.systems` wurden **nacheinander**
+probiert. Wenn genau der zuerst probierte Mirror in dem Moment hängt,
+verbraucht er sein volles Timeout-Budget, bevor der zweite (möglicherweise
+gesunde) Mirror überhaupt drankommt — bei zwei Mirrors mit je ~18-23s
+Timeout ist das ganze Budget schnell aufgebraucht, ohne dass der
+tatsächlich gesunde Mirror je eine faire Chance bekommt. Das erklärt, warum
+Timeout-/Radius-Tuning nichts half: das eigentliche Problem war die
+Reihenfolge, nicht die Kosten.
+
+Behoben durch einen Wechsel von sequenziellem Durchprobieren zu **Racing**:
+`runOverpassQuery` schickt die Anfrage jetzt an alle Mirrors gleichzeitig
+(`Promise.any`) und nimmt die erste erfolgreiche Antwort, statt der Reihe
+nach zu warten. Scheitern alle, werden die Fehlermeldungen alle Mirrors
+gesammelt (`AggregateError`) und wie bisher zu einer verständlichen
+Fehlermeldung zusammengefasst. Der große Vorteil: das Worst-Case-Zeitbudget
+bleibt bei ungefähr einem einzigen `timeoutMs` (statt der Summe über alle
+Mirrors), weil alle parallel laufen — ein einzelner gesunder Mirror
+gewinnt sofort, während ein hängender Mirror die anderen nicht mehr
+blockiert. Das löst genau die Spannung auf, die die vorherigen Fixes hatten
+(mehr Redundanz vs. Zeitbudget) — mit Racing kostet ein zusätzlicher Mirror
+in der Fallback-Liste kein zusätzliches Zeitbudget mehr im Worst Case,
+sodass die Liste bei Bedarf künftig auch wieder wachsen könnte.
+
 ### Performance: ein OSRM-Request statt vieler pro Route
 
 `routeChain()` in `src/lib/osrm.ts` schickte früher pro Etappe eine eigene,
